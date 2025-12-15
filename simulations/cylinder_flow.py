@@ -271,7 +271,7 @@ def animate_velocity_field(result, skip=8, save_path=None):
     return anim
 
 
-def plot_velocity_field(result, time_idx=-1, skip=5):
+def plot_velocity_field(result, time_idx=-1, skip=8, save_path=None):
     """
     Plot velocity vectors over speed magnitude (static).
 
@@ -279,6 +279,7 @@ def plot_velocity_field(result, time_idx=-1, skip=5):
         result: Output from run_cylinder_flow
         time_idx: Which timestep to plot (-1 for last)
         skip: Plot every skip-th vector
+        save_path: If provided, save figure to this path
     """
     params = result['params']
     nx, ny = params['nx'], params['ny']
@@ -294,10 +295,10 @@ def plot_velocity_field(result, time_idx=-1, skip=5):
                    extent=[0, nx, 0, ny], aspect='equal')
     plt.colorbar(im, ax=ax, label='Speed |u|')
 
-    # Velocity vectors
+    # Velocity vectors (same style as animation)
     x, y = np.meshgrid(np.arange(0, nx, skip), np.arange(0, ny, skip), indexing='ij')
     ax.quiver(x, y, u[0, ::skip, ::skip], u[1, ::skip, ::skip],
-              color='white', scale=2, width=0.002, alpha=0.8)
+              color='white', scale=8, width=0.001, alpha=0.7)
 
     # Cylinder
     circle = Circle((cx, cy), r, fill=True, color='gray', ec='black', lw=2)
@@ -308,16 +309,22 @@ def plot_velocity_field(result, time_idx=-1, skip=5):
     ax.set_title(f"Velocity Field - Re = {params['Re']}")
 
     plt.tight_layout()
-    plt.show()
+
+    if save_path:
+        fig.savefig(save_path, dpi=150)
+        print(f"Figure saved to {save_path}")
+    else:
+        plt.show()
 
 
-def plot_streamlines(result, time_idx=-1):
+def plot_streamlines(result, time_idx=-1, save_path=None):
     """
     Plot streamlines.
 
     Args:
         result: Output from run_cylinder_flow
         time_idx: Which timestep to plot
+        save_path: If provided, save figure to this path
     """
     params = result['params']
     nx, ny = params['nx'], params['ny']
@@ -350,7 +357,12 @@ def plot_streamlines(result, time_idx=-1):
     ax.set_ylim(0, ny)
 
     plt.tight_layout()
-    plt.show()
+
+    if save_path:
+        fig.savefig(save_path, dpi=150)
+        print(f"Figure saved to {save_path}")
+    else:
+        plt.show()
 
 
 def animate_all(result, skip=8, save_path=None):
@@ -432,7 +444,13 @@ def animate_all(result, skip=8, save_path=None):
     return anim
 
 
-if __name__ == "__main__":
+def run_all_visualizations(save_dir=None):
+    """
+    Run cylinder flow simulation and create visualizations.
+
+    Args:
+        save_dir: If provided, save all outputs to this directory
+    """
     print("=" * 60)
     print("Cylinder Flow Simulation")
     print("=" * 60)
@@ -449,5 +467,26 @@ if __name__ == "__main__":
         save_every=200
     )
 
-    print("\nAnimating results...")
-    animate_all(result)
+    if save_dir:
+        save_dir = Path(save_dir)
+        save_dir.mkdir(parents=True, exist_ok=True)
+
+        print("\nSaving visualizations...")
+        anim = animate_all(result, save_path=save_dir / "cylinder_flow.gif")
+        plot_velocity_field(result, save_path=save_dir / "cylinder_velocity_field.png")
+        plot_streamlines(result, save_path=save_dir / "cylinder_streamlines.png")
+
+        return result, anim
+    else:
+        print("\nAnimating results...")
+        anim = animate_all(result)
+        return result, anim
+
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Cylinder Flow Simulation")
+    parser.add_argument("--save", type=str, default=None,
+                        help="Directory to save outputs (default: show interactively)")
+    args = parser.parse_args()
+    run_all_visualizations(save_dir=args.save)

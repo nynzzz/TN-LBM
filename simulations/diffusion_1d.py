@@ -95,7 +95,7 @@ def animate_gaussian_advection(nx=256, nt=400, tau=0.8, u0=0.1, save_path=None):
     return anim
 
 
-def plot_diffusion_comparison(nx=256, nt=500, taus=[0.6, 0.8, 1.0, 1.5]):
+def plot_diffusion_comparison(nx=256, nt=500, taus=[0.6, 0.8, 1.0, 1.5], save_path=None):
     """
     Compare diffusion rates for different relaxation times.
 
@@ -103,6 +103,7 @@ def plot_diffusion_comparison(nx=256, nt=500, taus=[0.6, 0.8, 1.0, 1.5]):
         nx: Number of grid points
         nt: Number of timesteps
         taus: List of relaxation times to compare
+        save_path: If provided, save figure to this path
     """
     x = np.arange(nx)
     x0, sigma = nx / 2, 10.0
@@ -136,10 +137,15 @@ def plot_diffusion_comparison(nx=256, nt=500, taus=[0.6, 0.8, 1.0, 1.5]):
         ax.grid(True, alpha=0.3)
 
     plt.tight_layout()
-    plt.show()
+
+    if save_path:
+        fig.savefig(save_path, dpi=150)
+        print(f"Figure saved to {save_path}")
+    else:
+        plt.show()
 
 
-def plot_mass_momentum_conservation(nx=128, nt=500, tau=0.8, u0=0.1):
+def plot_mass_momentum_conservation(nx=128, nt=500, tau=0.8, u0=0.1, save_path=None):
     """
     Plot mass and momentum conservation over time.
 
@@ -148,6 +154,7 @@ def plot_mass_momentum_conservation(nx=128, nt=500, tau=0.8, u0=0.1):
         nt: Number of timesteps
         tau: Relaxation time
         u0: Background velocity
+        save_path: If provided, save figure to this path
     """
     x = np.arange(nx)
     x0, sigma = nx / 4, 8.0
@@ -184,34 +191,62 @@ def plot_mass_momentum_conservation(nx=128, nt=500, tau=0.8, u0=0.1):
     ax2.set_ylim(1e-16, 1e-10)
 
     plt.tight_layout()
-    plt.show()
+
+    if save_path:
+        fig.savefig(save_path, dpi=150)
+        print(f"Figure saved to {save_path}")
+    else:
+        plt.show()
 
 
-def run_all_visualizations():
+def run_all_visualizations(save_dir=None):
     """
-    Run all visualizations simultaneously using non-blocking mode.
+    Run all visualizations.
+
+    Args:
+        save_dir: If provided, save all outputs to this directory
     """
     print("D1Q3 LBM Visualization")
     print("=" * 40)
 
-    # Use non-blocking mode
-    plt.ion()
+    if save_dir:
+        save_dir = Path(save_dir)
+        save_dir.mkdir(parents=True, exist_ok=True)
 
-    print("\n1. Running advection animation...")
-    anim = animate_gaussian_advection()
+        print("\n1. Running advection animation...")
+        anim = animate_gaussian_advection(save_path=save_dir / "d1q3_advection.gif")
 
-    print("\n2. Diffusion comparison for different τ...")
-    plot_diffusion_comparison()
+        print("\n2. Diffusion comparison for different τ...")
+        plot_diffusion_comparison(save_path=save_dir / "d1q3_diffusion_comparison.png")
 
-    print("\n3. Conservation properties...")
-    plot_mass_momentum_conservation()
+        print("\n3. Conservation properties...")
+        plot_mass_momentum_conservation(save_path=save_dir / "d1q3_conservation.png")
 
-    # Keep all windows open
-    plt.ioff()
-    plt.show()
+        return anim
+    else:
+        # Use non-blocking mode for interactive display
+        plt.ion()
 
-    return anim
+        print("\n1. Running advection animation...")
+        anim = animate_gaussian_advection()
+
+        print("\n2. Diffusion comparison for different τ...")
+        plot_diffusion_comparison()
+
+        print("\n3. Conservation properties...")
+        plot_mass_momentum_conservation()
+
+        # Keep all windows open
+        plt.ioff()
+        plt.show()
+
+        return anim
 
 
 if __name__ == "__main__":
-    run_all_visualizations()
+    import argparse
+    parser = argparse.ArgumentParser(description="D1Q3 LBM Visualization")
+    parser.add_argument("--save", type=str, default=None,
+                        help="Directory to save outputs (default: show interactively)")
+    args = parser.parse_args()
+    run_all_visualizations(save_dir=args.save)

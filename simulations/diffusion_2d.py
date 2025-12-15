@@ -185,7 +185,7 @@ def plot_velocity_field(rho, u, title="Velocity Field", skip=4):
     plt.show()
 
 
-def plot_shear_wave_decay(nx=64, ny=64, nt=1000, tau=0.8):
+def plot_shear_wave_decay(nx=64, ny=64, nt=1000, tau=0.8, save_path=None):
     """
     Validate shear wave decay rate against analytical solution.
 
@@ -196,6 +196,7 @@ def plot_shear_wave_decay(nx=64, ny=64, nt=1000, tau=0.8):
         nx, ny: Grid dimensions
         nt: Number of timesteps
         tau: Relaxation time
+        save_path: If provided, save figure to this path
     """
     # Initial condition
     x, y = np.meshgrid(np.arange(nx), np.arange(ny), indexing='ij')
@@ -251,34 +252,62 @@ def plot_shear_wave_decay(nx=64, ny=64, nt=1000, tau=0.8):
     print(f"Mean relative error: {rel_error:.2e}")
 
     plt.tight_layout()
-    plt.show()
+
+    if save_path:
+        fig.savefig(save_path, dpi=150)
+        print(f"Figure saved to {save_path}")
+    else:
+        plt.show()
 
 
-def run_all_visualizations():
+def run_all_visualizations(save_dir=None):
     """
-    Run all visualizations simultaneously using non-blocking mode.
+    Run all visualizations.
+
+    Args:
+        save_dir: If provided, save all outputs to this directory
     """
     print("D2Q9 LBM Visualization")
     print("=" * 40)
 
-    # Use non-blocking mode
-    plt.ion()
+    if save_dir:
+        save_dir = Path(save_dir)
+        save_dir.mkdir(parents=True, exist_ok=True)
 
-    print("\n1. Gaussian diffusion animation...")
-    anim1 = animate_gaussian_diffusion()
+        print("\n1. Gaussian diffusion animation...")
+        anim1 = animate_gaussian_diffusion(save_path=save_dir / "d2q9_gaussian_diffusion.gif")
 
-    print("\n2. Shear wave decay animation...")
-    anim2 = animate_shear_wave()
+        print("\n2. Shear wave decay animation...")
+        anim2 = animate_shear_wave(save_path=save_dir / "d2q9_shear_wave.gif")
 
-    print("\n3. Shear wave decay validation...")
-    plot_shear_wave_decay()
+        print("\n3. Shear wave decay validation...")
+        plot_shear_wave_decay(save_path=save_dir / "d2q9_shear_wave_validation.png")
 
-    # Keep all windows open
-    plt.ioff()
-    plt.show()
+        return anim1, anim2
+    else:
+        # Use non-blocking mode for interactive display
+        plt.ion()
 
-    return anim1, anim2
+        print("\n1. Gaussian diffusion animation...")
+        anim1 = animate_gaussian_diffusion()
+
+        print("\n2. Shear wave decay animation...")
+        anim2 = animate_shear_wave()
+
+        print("\n3. Shear wave decay validation...")
+        plot_shear_wave_decay()
+
+        # Keep all windows open
+        plt.ioff()
+        plt.show()
+
+        return anim1, anim2
 
 
 if __name__ == "__main__":
-    run_all_visualizations()
+    import argparse
+    parser = argparse.ArgumentParser(description="D2Q9 LBM Visualization")
+    parser.add_argument("--save", type=str, default=None,
+                        help="Directory to save outputs (default: show interactively)")
+    args = parser.parse_args()
+    run_all_visualizations(save_dir=args.save)
