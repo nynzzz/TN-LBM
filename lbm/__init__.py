@@ -10,7 +10,7 @@ from .collision import collide_bgk
 from .streaming import stream
 from .boundary import (
     apply_bounce_back,
-    apply_bounce_back_moving,
+    apply_bounce_back_moving_top,
     equilibrium_inlet_left,
     extrapolation_outlet_right,
     create_cylinder_mask,
@@ -24,7 +24,7 @@ __all__ = [
     "collide_bgk",
     "stream",
     "apply_bounce_back",
-    "apply_bounce_back_moving",
+    "apply_bounce_back_moving_top",
     "equilibrium_inlet_left",
     "extrapolation_outlet_right",
     "create_cylinder_mask",

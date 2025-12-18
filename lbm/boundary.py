@@ -37,36 +37,60 @@ def apply_bounce_back(lattice: Lattice, f: np.ndarray, solid: np.ndarray) -> np.
     return f_new
 
 
-def apply_bounce_back_moving(lattice: Lattice, f: np.ndarray, solid: np.ndarray,
-                              wall_velocity: np.ndarray, rho_wall: float = 1.0) -> np.ndarray:
+def apply_bounce_back_moving_top(lattice: Lattice, f: np.ndarray,
+                                  wall_velocity: np.ndarray, rho_wall: float = 1.0) -> np.ndarray:
     """
-    Apply bounce-back with moving wall (e.g., lid-driven cavity top wall).
+    Apply bounce-back with moving wall specifically for a TOP wall (lid-driven cavity).
 
-    For a moving wall, the bounce-back includes a momentum correction:
-    f_i = f_opp + 2 * w_i * rho * (c_i · u_wall) / cs²
+    For D2Q9 with top wall at y=ny-1, we only need to update populations
+    that point downward (into the fluid): indices 4, 7, 8
+
+    The bounce-back rule for moving wall:
+    f_i(x_wall) = f_opp(x_wall) + 2 * w_i * rho * (c_i · u_wall) / cs²
+
+    where f_opp is the post-streaming population at the wall node.
 
     Args:
-        lattice: Lattice definition
-        f: Distribution functions after streaming
-        solid: Boolean mask of wall nodes
-        wall_velocity: Wall velocity, shape (2,) for 2D
+        lattice: Lattice definition (must be D2Q9)
+        f: Distribution functions after streaming, shape (9, nx, ny)
+        wall_velocity: Wall velocity, shape (2,) - typically (u_lid, 0)
         rho_wall: Density at wall (usually 1.0)
 
     Returns:
-        f_new: Distributions with moving bounce-back applied
+        f_new: Distributions with moving bounce-back applied at top wall
     """
-    if lattice.d != 2:
-        raise ValueError("Moving bounce-back only implemented for 2D")
+    if lattice.d != 2 or lattice.q != 9:
+        raise ValueError("Moving top wall BC only implemented for D2Q9")
 
     f_new = f.copy()
 
-    for i in range(lattice.q):
-        opp = lattice.opposite[i]
-        # c_i · u_wall
-        cu = lattice.c[i, 0] * wall_velocity[0] + lattice.c[i, 1] * wall_velocity[1]
-        # Momentum correction term
-        correction = 2 * lattice.w[i] * rho_wall * cu / lattice.cs2
-        f_new[i, solid] = f[opp, solid] - correction
+    # D2Q9 velocity indices:
+    # 6  2  5
+    #  \ | /
+    # 3--0--1
+    #  / | \
+    # 7  4  8
+
+    # Top wall (y = ny-1): populations pointing INTO fluid (downward) are 4, 7, 8
+    # These came from populations 2, 5, 6 which streamed into the wall
+
+    # Population 4 (pointing down, c=[0,-1]): bounced from 2 (c=[0,1])
+    # Population 7 (pointing down-left, c=[-1,-1]): bounced from 5 (c=[1,1])
+    # Population 8 (pointing down-right, c=[1,-1]): bounced from 6 (c=[-1,1])
+
+    ux = wall_velocity[0]
+
+    # f_4: c_4 = [0, -1], c_4 · u_wall = 0
+    f_new[4, :, -1] = f[2, :, -1]
+
+    # f_7: c_7 = [-1, -1], c_7 · u_wall = -ux
+    # correction = 2 * w_7 * rho * (-ux) / cs2 = 2 * (1/36) * rho * (-ux) / (1/3)
+    #            = 2 * (1/36) * 3 * rho * (-ux) = -rho * ux / 6
+    f_new[7, :, -1] = f[5, :, -1] - (1.0/6.0) * rho_wall * ux
+
+    # f_8: c_8 = [1, -1], c_8 · u_wall = ux
+    # correction = 2 * w_8 * rho * ux / cs2 = rho * ux / 6
+    f_new[8, :, -1] = f[6, :, -1] + (1.0/6.0) * rho_wall * ux
 
     return f_new
 
@@ -122,7 +146,7 @@ def equilibrium_inlet_left(lattice: Lattice, f: np.ndarray,
 
     # Compute equilibrium for 1D slice (need to reshape for compute_equilibrium)
     # compute_equilibrium expects rho: (nx, ny), u: (2, nx, ny)
-    # We'll compute it manually for efficiency
+    # Compute it manually for efficiency
     for i in range(lattice.q):
         cu = lattice.c[i, 0] * u_bc[0, :] + lattice.c[i, 1] * u_bc[1, :]
         usq = u_bc[0, :]**2 + u_bc[1, :]**2
