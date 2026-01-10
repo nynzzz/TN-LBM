@@ -59,6 +59,10 @@ pip install --only-binary :all: llvmlite numba --quiet
 echo "Installing quimb..."
 pip install quimb --quiet
 
+# Install numpy-hilbert-curve for 2D->1D mappings
+echo "Installing numpy-hilbert-curve..."
+pip install numpy-hilbert-curve --quiet
+
 # Install Jupyter
 echo "Installing Jupyter..."
 pip install jupyter ipykernel --quiet
