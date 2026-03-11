@@ -1,0 +1,4 @@
+simulation,N,Re,t_sampling_recommended,tau_decay,t_sampling_min,t_sampling_max,error_at_t_sampling,D,T_shed_estimated,t_transient_end,tau,convergence_threshold,converged,t_converged
+taylor_green,256,100,6500,3242.2778765548087,1621,12969,0.006959826326498991,,,,,,,
+cylinder,256,100,10511,,,,,32.0,1882.3529411764705,1100,,,,
+cavity,256,100,34646,,,,,,,,1.268,1e-06,True,31497

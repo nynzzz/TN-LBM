@@ -20,6 +20,7 @@ from lbm.collision import compute_moments
 
 
 def run_cylinder_flow(
+    n: int = None,
     nx: int = 420,
     ny: int = 180,
     cylinder_x: float = None,
@@ -35,14 +36,39 @@ def run_cylinder_flow(
     Run flow around a cylinder simulation.
 
     Uses inlet/outlet with bounce-back on top/bottom walls and cylinder surface.
+
+    Args:
+        n: If specified, use square domain n x n (for TN-LBM compatibility).
+           Should be a power of 2 (e.g., 128, 256, 512).
+        nx, ny: Grid dimensions (used if n is None)
+        cylinder_x, cylinder_y: Cylinder center position
+        cylinder_r: Cylinder radius
+        u_inlet: Inlet velocity
+        Re: Reynolds number (based on cylinder diameter)
+        nt: Number of timesteps
+        save_every: Save every N steps
+        verbose: Print progress
     """
-    # Default cylinder position and size
-    if cylinder_r is None:
-        cylinder_r = ny / 10
-    if cylinder_x is None:
-        cylinder_x = 5 * (2 * cylinder_r)  # 5 diameters from inlet
-    if cylinder_y is None:
-        cylinder_y = ny / 2  # centered
+    # Square domain mode (for TN-LBM)
+    if n is not None:
+        nx = n
+        ny = n
+        # For square domain, use smaller cylinder for reasonable blockage
+        # D/N ~ 1/8 gives ~12.5% blockage ratio
+        if cylinder_r is None:
+            cylinder_r = n / 16  # D = N/8
+        if cylinder_x is None:
+            cylinder_x = n / 4  # 2D from inlet (quarter of domain)
+        if cylinder_y is None:
+            cylinder_y = n / 2  # centered
+    else:
+        # Rectangular domain (original behavior)
+        if cylinder_r is None:
+            cylinder_r = ny / 10
+        if cylinder_x is None:
+            cylinder_x = 5 * (2 * cylinder_r)  # 5 diameters from inlet
+        if cylinder_y is None:
+            cylinder_y = ny / 2  # centered
 
     D = 2 * cylinder_r
     nu = u_inlet * D / Re
@@ -148,7 +174,7 @@ def run_cylinder_flow(
         'solid': solid,
         'cylinder': cylinder,
         'params': {
-            'nx': nx, 'ny': ny, 'Re': Re, 'tau': tau, 'nu': nu,
+            'n': n, 'nx': nx, 'ny': ny, 'Re': Re, 'tau': tau, 'nu': nu,
             'u_inlet': u_inlet, 'cylinder_x': cylinder_x,
             'cylinder_y': cylinder_y, 'cylinder_r': cylinder_r,
             'save_every': save_every
@@ -168,7 +194,11 @@ def animate_cylinder_flow(result, save_path=None):
     nx, ny = params['nx'], params['ny']
     cx, cy, r = params['cylinder_x'], params['cylinder_y'], params['cylinder_r']
 
-    fig, ax = plt.subplots(figsize=(14, 4))
+    # Dynamic figure size based on aspect ratio
+    aspect = nx / ny
+    fig_width = min(14, 8 * aspect)
+    fig_height = max(4, 8 / aspect)
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height))
     fig.suptitle(f"Flow Around Cylinder - Re = {params['Re']}", fontsize=12)
 
     # Vorticity colormap
@@ -221,13 +251,19 @@ def animate_velocity_field(result, skip=8, save_path=None):
     cx, cy, r = params['cylinder_x'], params['cylinder_y'], params['cylinder_r']
     save_every = params.get('save_every', 100)
 
-    fig, ax = plt.subplots(figsize=(14, 4))
+    # Dynamic figure size based on aspect ratio
+    aspect = nx / ny
+    fig_width = min(14, 8 * aspect)
+    fig_height = max(4, 8 / aspect)
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height))
     fig.suptitle(f"Velocity Field - Re = {params['Re']}", fontsize=12)
 
     # Initial speed
     u = result['u'][0]
     speed = np.sqrt(u[0]**2 + u[1]**2)
-    vmax = np.max(np.sqrt(result['u'][-1][0]**2 + result['u'][-1][1]**2)) * 1.2
+    # Compute vmax from ALL frames for truly static colorbar
+    all_speeds = np.sqrt(result['u'][:, 0]**2 + result['u'][:, 1]**2)
+    vmax = np.percentile(all_speeds, 99) * 1.1
 
     im = ax.imshow(speed.T, origin='lower', cmap='viridis',
                    extent=[0, nx, 0, ny], aspect='equal', vmin=0, vmax=vmax)
@@ -288,7 +324,11 @@ def plot_velocity_field(result, time_idx=-1, skip=8, save_path=None):
     u = result['u'][time_idx]
     speed = np.sqrt(u[0]**2 + u[1]**2)
 
-    fig, ax = plt.subplots(figsize=(14, 4))
+    # Dynamic figure size based on aspect ratio
+    aspect = nx / ny
+    fig_width = min(14, 8 * aspect)
+    fig_height = max(4, 8 / aspect)
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height))
 
     # Speed as background
     im = ax.imshow(speed.T, origin='lower', cmap='viridis',
@@ -333,7 +373,11 @@ def plot_streamlines(result, time_idx=-1, save_path=None):
     u = result['u'][time_idx]
     speed = np.sqrt(u[0]**2 + u[1]**2)
 
-    fig, ax = plt.subplots(figsize=(14, 4))
+    # Dynamic figure size based on aspect ratio
+    aspect = nx / ny
+    fig_width = min(14, 8 * aspect)
+    fig_height = max(4, 8 / aspect)
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height))
 
     x = np.arange(nx)
     y = np.arange(ny)
@@ -379,13 +423,19 @@ def animate_all(result, skip=8, save_path=None):
     cx, cy, r = params['cylinder_x'], params['cylinder_y'], params['cylinder_r']
     save_every = params.get('save_every', 100)
 
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 8))
+    # Dynamic figure size based on aspect ratio
+    aspect = nx / ny
+    fig_width = min(14, 10 * aspect)
+    fig_height = max(8, 10 / aspect)
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(fig_width, fig_height))
     fig.suptitle(f"Cylinder Flow - Re = {params['Re']}", fontsize=14)
 
     # --- Top: Velocity field ---
     u = result['u'][0]
     speed = np.sqrt(u[0]**2 + u[1]**2)
-    vmax_speed = np.max(np.sqrt(result['u'][-1][0]**2 + result['u'][-1][1]**2)) * 1.2
+    # Compute vmax from ALL frames for truly static colorbar
+    all_speeds = np.sqrt(result['u'][:, 0]**2 + result['u'][:, 1]**2)
+    vmax_speed = np.percentile(all_speeds, 99) * 1.1
 
     im1 = ax1.imshow(speed.T, origin='lower', cmap='viridis',
                      extent=[0, nx, 0, ny], aspect='equal', vmin=0, vmax=vmax_speed)
@@ -444,28 +494,44 @@ def animate_all(result, skip=8, save_path=None):
     return anim
 
 
-def run_all_visualizations(save_dir=None):
+def run_all_visualizations(save_dir=None, n=None, Re=100, nt=30000):
     """
     Run cylinder flow simulation and create visualizations.
 
     Args:
         save_dir: If provided, save all outputs to this directory
+        n: If specified, use square n×n domain (for TN-LBM compatibility)
+        Re: Reynolds number
+        nt: Number of timesteps
     """
     print("=" * 60)
     print("Cylinder Flow Simulation")
     print("=" * 60)
 
-    # tau = 3 * nu + 0.5 = 3 * (u_inlet * D / Re) + 0.5
-    # For stability: tau > 0.55 recommended
-    # With D=36, u_inlet=0.1, Re=100: nu=0.036, tau=0.608
-    result = run_cylinder_flow(
-        nx=600,
-        ny=180,
-        Re=100,
-        u_inlet=0.1,
-        nt=20000,
-        save_every=200
-    )
+    # Adjust save_every based on nt
+    save_every = max(100, nt // 150)
+
+    if n is not None:
+        # Square domain mode (TN-compatible)
+        print(f"  Mode: Square domain ({n}×{n}) for TN-LBM")
+        result = run_cylinder_flow(
+            n=n,
+            Re=Re,
+            u_inlet=0.1,
+            nt=nt,
+            save_every=save_every
+        )
+    else:
+        # Rectangular domain mode (original)
+        print("  Mode: Rectangular domain (600×180)")
+        result = run_cylinder_flow(
+            nx=600,
+            ny=180,
+            Re=Re,
+            u_inlet=0.1,
+            nt=nt,
+            save_every=save_every
+        )
 
     if save_dir:
         save_dir = Path(save_dir)
@@ -488,5 +554,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Cylinder Flow Simulation")
     parser.add_argument("--save", type=str, default=None,
                         help="Directory to save outputs (default: show interactively)")
+    parser.add_argument("--n", type=int, default=None,
+                        help="Square domain size (e.g., 256 for 256×256). If not specified, uses rectangular 600×180")
+    parser.add_argument("--Re", type=float, default=100,
+                        help="Reynolds number (default: 100)")
+    parser.add_argument("--nt", type=int, default=30000,
+                        help="Number of timesteps (default: 30000)")
     args = parser.parse_args()
-    run_all_visualizations(save_dir=args.save)
+    run_all_visualizations(save_dir=args.save, n=args.n, Re=args.Re, nt=args.nt)

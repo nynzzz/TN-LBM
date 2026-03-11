@@ -196,8 +196,8 @@ def run_lid_driven_cavity(
     u_history = []
     rho_history = []
 
-    # For convergence check
-    u_prev = u.copy()
+    # For convergence check - compare CONSECUTIVE timesteps
+    rho_prev, u_prev = compute_moments(D2Q9, f)
 
     converged = False
     final_t = nt
@@ -215,38 +215,46 @@ def run_lid_driven_cavity(
         # 2. Moving lid (top)
         f = apply_bounce_back_moving_top(D2Q9, f, u_wall)
 
-        # Save and check convergence
+        # Compute moments for convergence check (every timestep)
+        rho, u = compute_moments(D2Q9, f)
+
+        # Check convergence (L2 norm of velocity change between CONSECUTIVE steps)
+        du = np.sqrt(np.sum((u - u_prev)**2) / np.sum(u_prev**2 + 1e-10))
+
+        if du < convergence_threshold:
+            if verbose:
+                print(f"  Converged at t = {t} (du = {du:.2e})")
+            converged = True
+            final_t = t
+            # Save final state
+            u_clean = u.copy()
+            u_clean[0, walls | lid] = 0
+            u_clean[1, walls | lid] = 0
+            u_clean[0, lid] = u_lid
+            u_history.append(u_clean)
+            rho_history.append(rho.copy())
+            break
+
+        # Save for history (less frequently)
         if t % save_every == 0:
-            rho, u = compute_moments(D2Q9, f)
-
-            # Zero velocity at walls for cleaner visualization
-            u[0, walls | lid] = 0
-            u[1, walls | lid] = 0
-            u[0, lid] = u_lid  # Lid has prescribed velocity
-
-            u_history.append(u.copy())
+            u_clean = u.copy()
+            u_clean[0, walls | lid] = 0
+            u_clean[1, walls | lid] = 0
+            u_clean[0, lid] = u_lid
+            u_history.append(u_clean)
             rho_history.append(rho.copy())
 
-            # Check convergence (L2 norm of velocity change)
-            if t > 0:
-                du = np.sqrt(np.sum((u - u_prev)**2) / np.sum(u_prev**2 + 1e-10))
-                if verbose and t % (save_every * 10) == 0:
-                    u_max = np.max(np.sqrt(u[0]**2 + u[1]**2))
-                    print(f"  t = {t}/{nt}, du = {du:.2e}, u_max = {u_max:.4f}")
+            if verbose and t % (save_every * 10) == 0:
+                u_max = np.max(np.sqrt(u[0]**2 + u[1]**2))
+                print(f"  t = {t}/{nt}, du = {du:.2e}, u_max = {u_max:.4f}")
 
-                if du < convergence_threshold:
-                    if verbose:
-                        print(f"  Converged at t = {t} (du = {du:.2e})")
-                    converged = True
-                    final_t = t
-                    break
+        # Update previous for next iteration
+        u_prev = u.copy()
 
-            u_prev = u.copy()
-
-            # Stability check
-            if np.any(np.isnan(rho)) or np.max(np.abs(u)) > 0.5:
-                print(f"  UNSTABLE at t={t}!")
-                break
+        # Stability check
+        if np.any(np.isnan(rho)) or np.max(np.abs(u)) > 0.5:
+            print(f"  UNSTABLE at t={t}!")
+            break
 
     if verbose and not converged:
         print(f"  Finished {nt} timesteps (not fully converged)")
