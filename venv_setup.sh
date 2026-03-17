@@ -48,8 +48,8 @@ echo "Upgrading pip..."
 pip install --upgrade pip --quiet
 
 # Install base scientific packages
-echo "Installing base packages (numpy, scipy, matplotlib)..."
-pip install numpy scipy matplotlib --quiet
+echo "Installing base packages (numpy, scipy, matplotlib, pandas)..."
+pip install numpy scipy matplotlib pandas --quiet
 
 # Install numba (with pre-built wheels to avoid LLVM issues)
 echo "Installing numba (pre-built wheels)..."
@@ -96,7 +96,4 @@ echo "=== Setup Complete ==="
 echo ""
 echo "To activate the environment:"
 echo "  source $VENV_NAME/bin/activate"
-echo ""
-echo "To run Jupyter notebook:"
-echo "  jupyter notebook tn/play_around.ipynb"
 echo ""

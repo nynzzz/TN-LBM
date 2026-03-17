@@ -216,7 +216,7 @@ def run_all_visualizations(save_dir=None):
         print("\n1. Running advection animation...")
         anim = animate_gaussian_advection(save_path=save_dir / "d1q3_advection.gif")
 
-        print("\n2. Diffusion comparison for different τ...")
+        print("\n2. Diffusion comparison for different tau...")
         plot_diffusion_comparison(save_path=save_dir / "d1q3_diffusion_comparison.png")
 
         print("\n3. Conservation properties...")
@@ -230,7 +230,7 @@ def run_all_visualizations(save_dir=None):
         print("\n1. Running advection animation...")
         anim = animate_gaussian_advection()
 
-        print("\n2. Diffusion comparison for different τ...")
+        print("\n2. Diffusion comparison for different tau...")
         plot_diffusion_comparison()
 
         print("\n3. Conservation properties...")

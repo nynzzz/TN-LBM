@@ -15,7 +15,7 @@ echo "CPUs allocated: $SLURM_CPUS_PER_TASK"
 # Load modules
 module purge
 module load 2024
-module load Python/3.11.5-GCCcore-13.2.0
+module load Python/3.12.3-GCCcore-13.3.0
 
 # Activate virtual environment
 source ~/tn-lbm-venv/bin/activate
@@ -29,7 +29,7 @@ export MKL_NUM_THREADS=1
 export OPENBLAS_NUM_THREADS=1
 
 # Run the experiment (48 cores for 48 tasks)
-python -u experiments/memory_comparison/run_memory_comparison.py \
+python -u experiments/stage2/run_memory_comparison.py \
     --sim all \
     --n-cores 48 \
     --verbose

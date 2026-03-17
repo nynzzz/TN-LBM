@@ -319,7 +319,7 @@ def plot_analysis(tg_result=None, cyl_result=None, cav_result=None, save_dir=Non
         summary_text = (
             f"Lid-Driven Cavity (N={cav_result['N']}, Re={cav_result['Re']})\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"τ (relaxation time): {cav_result['tau']:.4f}\n\n"
+            f"tau (relaxation time): {cav_result['tau']:.4f}\n\n"
             f"Convergence threshold: {cav_result['convergence_threshold']:.0e}\n\n"
             f"Converged: {'Yes' if cav_result['converged'] else 'No'}\n\n"
             f"Convergence time: {cav_result['t_converged']} timesteps\n\n"

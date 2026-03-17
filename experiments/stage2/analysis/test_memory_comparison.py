@@ -1,9 +1,9 @@
 """
 Local test for memory comparison: TN-LBM vs Coarse LBM.
-Tests a single χ value (χ=12) for all three simulation types.
+Tests a single chi value (chi=12) for all three simulation types.
 
 For time-dependent flows (Taylor-Green, Cylinder), we use physically equivalent time:
-- Same t/τ_decay ratio (Taylor-Green)
+- Same t/tau_decay ratio (Taylor-Green)
 - Same t/T_shed ratio (Cylinder)
 """
 
@@ -36,7 +36,7 @@ def compute_memory(method: str, N: int, chi: int = None) -> int:
         return 9 * N * N  # 9 populations × N²
     elif method == 'tn':
         L = 2 * int(np.log2(N))  # chain length per population
-        return 9 * L * chi * chi  # 9 populations × L sites × χ² per site
+        return 9 * L * chi * chi  # 9 populations × L sites × chi² per site
     else:
         raise ValueError(f"Unknown method: {method}")
 
@@ -80,7 +80,7 @@ def run_cavity_vanilla(N: int, Re: float, u_lid: float = 0.1,
     tau = 3 * nu + 0.5
 
     if tau <= 0.5 or tau > 2.0:
-        raise ValueError(f"Unstable τ={tau:.4f} for N={N}, Re={Re}")
+        raise ValueError(f"Unstable tau={tau:.4f} for N={N}, Re={Re}")
 
     walls, lid = create_cavity_walls(N)
     u_wall = np.array([u_lid, 0.0])
@@ -90,7 +90,7 @@ def run_cavity_vanilla(N: int, Re: float, u_lid: float = 0.1,
     f = compute_equilibrium(D2Q9, rho, u_prev)
 
     if verbose:
-        print(f"  Running N={N}, Re={Re}, τ={tau:.4f}")
+        print(f"  Running N={N}, Re={Re}, tau={tau:.4f}")
 
     for t in range(max_nt):
         f = collide_bgk(D2Q9, f, tau)
@@ -136,7 +136,7 @@ def run_cavity_tn(N: int, Re: float, chi: int, nt: int,
     f = compute_equilibrium(D2Q9, rho, u)
 
     if verbose:
-        print(f"  Running TN-LBM: N={N}, Re={Re}, χ={chi}, nt={nt}")
+        print(f"  Running TN-LBM: N={N}, Re={Re}, chi={chi}, nt={nt}")
 
     for t in range(nt):
         # Collision
@@ -166,14 +166,14 @@ def test_cavity_memory_comparison(chi: int = 12, N_fine: int = 256, Re: float = 
     """Test memory comparison for lid-driven cavity."""
     print("\n" + "=" * 60)
     print("CAVITY: Memory Comparison Test")
-    print(f"N_fine={N_fine}, Re={Re}, χ={chi}")
+    print(f"N_fine={N_fine}, Re={Re}, chi={chi}")
     print("=" * 60)
 
     N_coarse = memory_equivalent_grid(N_fine, chi)
     memory = compute_memory('tn', N_fine, chi)
 
     print(f"\nMemory budget: {memory:,} floats")
-    print(f"  TN-LBM: N={N_fine}, χ={chi}")
+    print(f"  TN-LBM: N={N_fine}, chi={chi}")
     print(f"  Coarse: N={N_coarse}")
 
     # Step 1: Run fine-grid baseline
@@ -184,7 +184,7 @@ def test_cavity_memory_comparison(chi: int = 12, N_fine: int = 256, Re: float = 
     print(f"  Baseline: converged at nt={nt_baseline}")
 
     # Step 2: Run TN-LBM
-    print(f"\n[2] Running TN-LBM (χ={chi})...")
+    print(f"\n[2] Running TN-LBM (chi={chi})...")
     u_tn = run_cavity_tn(N_fine, Re, chi, nt_baseline)
     error_tn = compute_velocity_error(u_tn, u_baseline)
     print(f"  TN-LBM error: {error_tn:.4e} ({error_tn*100:.2f}%)")
@@ -229,7 +229,7 @@ def run_taylor_green_vanilla(N: int, Re: float, nt: int, U0: float = 0.1,
     tau_decay = 1 / (2 * nu * k**2)
 
     if verbose:
-        print(f"  Running N={N}, Re={Re}, τ={tau:.4f}, τ_decay={tau_decay:.1f}")
+        print(f"  Running N={N}, Re={Re}, tau={tau:.4f}, tau_decay={tau_decay:.1f}")
 
     # Initialize with analytical solution at t=0
     rho = np.ones((N, N))
@@ -262,7 +262,7 @@ def run_taylor_green_tn(N: int, Re: float, chi: int, nt: int, U0: float = 0.1,
     tau = 3 * nu + 0.5
 
     if verbose:
-        print(f"  Running TN-LBM: N={N}, Re={Re}, χ={chi}, nt={nt}")
+        print(f"  Running TN-LBM: N={N}, Re={Re}, chi={chi}, nt={nt}")
 
     rho = np.ones((N, N))
     u_init = analytical_taylor_green(N, t=0, nu=nu, U0=U0)
@@ -290,37 +290,37 @@ def test_taylor_green_memory_comparison(chi: int = 12, N_fine: int = 256, Re: fl
     """
     Test memory comparison for Taylor-Green vortex.
 
-    Key insight: τ_decay = 1/(2νk²) where ν ∝ N and k ∝ 1/N, so τ_decay ∝ N.
-    To reach the same physical time (same t/τ_decay ratio), coarse grid needs:
+    Key insight: tau_decay = 1/(2νk²) where ν ∝ N and k ∝ 1/N, so tau_decay ∝ N.
+    To reach the same physical time (same t/tau_decay ratio), coarse grid needs:
         nt_coarse = nt_fine * (N_coarse / N_fine)
     """
     print("\n" + "=" * 60)
     print("TAYLOR-GREEN: Memory Comparison Test")
-    print(f"N_fine={N_fine}, Re={Re}, χ={chi}")
+    print(f"N_fine={N_fine}, Re={Re}, chi={chi}")
     print("=" * 60)
 
     N_coarse = memory_equivalent_grid(N_fine, chi)
     memory = compute_memory('tn', N_fine, chi)
 
-    # T_sampling from CSV (at 2×τ_decay for fine grid)
+    # T_sampling from CSV (at 2×tau_decay for fine grid)
     t_sampling_fine = 6500  # From find_t_sampling.py results
 
     # Physically equivalent time for coarse grid
-    # τ_decay ∝ N (linear), so nt_coarse = nt_fine * (N_coarse/N_fine)
+    # tau_decay ∝ N (linear), so nt_coarse = nt_fine * (N_coarse/N_fine)
     scale_factor = N_coarse / N_fine
     t_sampling_coarse = int(t_sampling_fine * scale_factor)
 
     print(f"\nMemory budget: {memory:,} floats")
-    print(f"  TN-LBM: N={N_fine}, χ={chi}, nt={t_sampling_fine}")
+    print(f"  TN-LBM: N={N_fine}, chi={chi}, nt={t_sampling_fine}")
     print(f"  Coarse: N={N_coarse}, nt={t_sampling_coarse} (physically equivalent)")
 
     # Step 1: Run fine-grid baseline
     print(f"\n[1] Running fine-grid baseline (N={N_fine})...")
     u_baseline, tau_decay_fine = run_taylor_green_vanilla(N_fine, Re, t_sampling_fine)
-    print(f"  Baseline: τ_decay={tau_decay_fine:.1f}, t/τ_decay={t_sampling_fine/tau_decay_fine:.2f}")
+    print(f"  Baseline: tau_decay={tau_decay_fine:.1f}, t/tau_decay={t_sampling_fine/tau_decay_fine:.2f}")
 
     # Step 2: Run TN-LBM
-    print(f"\n[2] Running TN-LBM (χ={chi})...")
+    print(f"\n[2] Running TN-LBM (chi={chi})...")
     u_tn = run_taylor_green_tn(N_fine, Re, chi, t_sampling_fine)
     error_tn = compute_velocity_error(u_tn, u_baseline)
     print(f"  TN-LBM error: {error_tn:.4e} ({error_tn*100:.2f}%)")
@@ -328,7 +328,7 @@ def test_taylor_green_memory_comparison(chi: int = 12, N_fine: int = 256, Re: fl
     # Step 3: Run coarse LBM at physically equivalent time
     print(f"\n[3] Running coarse LBM (N={N_coarse}, nt={t_sampling_coarse})...")
     u_coarse, tau_decay_coarse = run_taylor_green_vanilla(N_coarse, Re, t_sampling_coarse)
-    print(f"  Coarse: τ_decay={tau_decay_coarse:.1f}, t/τ_decay={t_sampling_coarse/tau_decay_coarse:.2f}")
+    print(f"  Coarse: tau_decay={tau_decay_coarse:.1f}, t/tau_decay={t_sampling_coarse/tau_decay_coarse:.2f}")
 
     # Interpolate to fine grid
     u_coarse_interp = interpolate_to_fine(u_coarse, N_fine)
@@ -378,7 +378,7 @@ def run_cylinder_vanilla(N: int, Re: float, nt: int, u_inlet: float = 0.1,
     T_shed = D / (St * u_inlet)
 
     if verbose:
-        print(f"  Running N={N}, Re={Re}, τ={tau:.4f}, D={D:.0f}")
+        print(f"  Running N={N}, Re={Re}, tau={tau:.4f}, D={D:.0f}")
         print(f"  T_shed (estimated) = {T_shed:.1f} timesteps")
 
     # Create geometry
@@ -437,7 +437,7 @@ def run_cylinder_tn(N: int, Re: float, chi: int, nt: int, u_inlet: float = 0.1,
     tau = 3 * nu + 0.5
 
     if verbose:
-        print(f"  Running TN-LBM: N={N}, Re={Re}, χ={chi}, nt={nt}")
+        print(f"  Running TN-LBM: N={N}, Re={Re}, chi={chi}, nt={nt}")
 
     cylinder = create_cylinder_mask(N, N, cylinder_x, cylinder_y, cylinder_r)
     walls = create_channel_walls(N, N)
@@ -489,7 +489,7 @@ def test_cylinder_memory_comparison(chi: int = 12, N_fine: int = 256, Re: float 
     """
     print("\n" + "=" * 60)
     print("CYLINDER: Memory Comparison Test")
-    print(f"N_fine={N_fine}, Re={Re}, χ={chi}")
+    print(f"N_fine={N_fine}, Re={Re}, chi={chi}")
     print("=" * 60)
 
     N_coarse = memory_equivalent_grid(N_fine, chi)
@@ -504,7 +504,7 @@ def test_cylinder_memory_comparison(chi: int = 12, N_fine: int = 256, Re: float 
     t_sampling_coarse = int(t_sampling_fine * scale_factor)
 
     print(f"\nMemory budget: {memory:,} floats")
-    print(f"  TN-LBM: N={N_fine}, χ={chi}, nt={t_sampling_fine}")
+    print(f"  TN-LBM: N={N_fine}, chi={chi}, nt={t_sampling_fine}")
     print(f"  Coarse: N={N_coarse}, nt={t_sampling_coarse} (physically equivalent)")
 
     # Step 1: Run fine-grid baseline
@@ -513,7 +513,7 @@ def test_cylinder_memory_comparison(chi: int = 12, N_fine: int = 256, Re: float 
     print(f"  Baseline: T_shed={T_shed_fine:.1f}, t/T_shed={t_sampling_fine/T_shed_fine:.2f}")
 
     # Step 2: Run TN-LBM
-    print(f"\n[2] Running TN-LBM (χ={chi})...")
+    print(f"\n[2] Running TN-LBM (chi={chi})...")
     u_tn = run_cylinder_tn(N_fine, Re, chi, t_sampling_fine)
 
     # Mask out solid for error calculation
@@ -567,8 +567,8 @@ def validate_time_scaling_taylor_green(N_fine: int = 256, N_coarse: int = 48, Re
     """
     Validate that the time scaling formula gives physically equivalent states.
 
-    For Taylor-Green, τ_decay = 1/(2νk²) where ν ∝ N and k ∝ 1/N, so τ_decay ∝ N.
-    At the same t/τ_decay ratio, the velocity amplitude decay should be identical.
+    For Taylor-Green, tau_decay = 1/(2νk²) where ν ∝ N and k ∝ 1/N, so tau_decay ∝ N.
+    At the same t/tau_decay ratio, the velocity amplitude decay should be identical.
     """
     from simulations.taylor_green import analytical_taylor_green
 
@@ -579,9 +579,9 @@ def validate_time_scaling_taylor_green(N_fine: int = 256, N_coarse: int = 48, Re
 
     U0 = 0.1
 
-    # Compute τ_decay for both grids
-    # τ_decay = 1/(2νk²), ν = U₀N/Re, k = 2π/N
-    # → τ_decay = Re*N / (8π²U₀) ∝ N (linear!)
+    # Compute tau_decay for both grids
+    # tau_decay = 1/(2νk²), ν = U₀N/Re, k = 2π/N
+    # → tau_decay = Re*N / (8π²U₀) ∝ N (linear!)
     nu_fine = U0 * N_fine / Re
     k_fine = 2 * np.pi / N_fine
     tau_decay_fine = 1 / (2 * nu_fine * k_fine**2)
@@ -590,20 +590,20 @@ def validate_time_scaling_taylor_green(N_fine: int = 256, N_coarse: int = 48, Re
     k_coarse = 2 * np.pi / N_coarse
     tau_decay_coarse = 1 / (2 * nu_coarse * k_coarse**2)
 
-    print(f"\nτ_decay scaling check:")
-    print(f"  τ_decay_fine   = {tau_decay_fine:.1f}")
-    print(f"  τ_decay_coarse = {tau_decay_coarse:.1f}")
+    print(f"\ntau_decay scaling check:")
+    print(f"  tau_decay_fine   = {tau_decay_fine:.1f}")
+    print(f"  tau_decay_coarse = {tau_decay_coarse:.1f}")
     print(f"  Ratio: {tau_decay_coarse/tau_decay_fine:.4f}")
     print(f"  Expected (N_c/N_f): {N_coarse/N_fine:.4f}")
 
-    # Choose test time (at 2×τ_decay for fine grid)
+    # Choose test time (at 2×tau_decay for fine grid)
     t_fine = int(2 * tau_decay_fine)
-    # τ_decay ∝ N, so t_coarse = t_fine * (N_coarse/N_fine)
+    # tau_decay ∝ N, so t_coarse = t_fine * (N_coarse/N_fine)
     t_coarse = int(t_fine * (N_coarse / N_fine))
 
     print(f"\nTest times:")
-    print(f"  t_fine   = {t_fine} (t/τ = {t_fine/tau_decay_fine:.2f})")
-    print(f"  t_coarse = {t_coarse} (t/τ = {t_coarse/tau_decay_coarse:.2f})")
+    print(f"  t_fine   = {t_fine} (t/tau = {t_fine/tau_decay_fine:.2f})")
+    print(f"  t_coarse = {t_coarse} (t/tau = {t_coarse/tau_decay_coarse:.2f})")
 
     # Run both simulations
     print(f"\nRunning fine grid (N={N_fine}, nt={t_fine})...")
@@ -622,7 +622,7 @@ def validate_time_scaling_taylor_green(N_fine: int = 256, N_coarse: int = 48, Re
     print(f"\nVelocity amplitude decay:")
     print(f"  Fine:     |u|_max/U0 = {decay_ratio_fine:.4f}")
     print(f"  Coarse:   |u|_max/U0 = {decay_ratio_coarse:.4f}")
-    print(f"  Expected: exp(-t/τ)  = {expected_decay:.4f}")
+    print(f"  Expected: exp(-t/tau)  = {expected_decay:.4f}")
 
     # Check if they match (within 5%)
     relative_diff = abs(decay_ratio_fine - decay_ratio_coarse) / decay_ratio_fine
@@ -764,20 +764,20 @@ def validate_interpolation_error(N_fine: int = 256, N_coarse: int = 48, Re: floa
 
 def validate_chi64_sanity_check(N_fine: int = 256, Re: float = 100):
     """
-    Sanity check: At χ=64, N_coarse=256, coarse LBM should match baseline exactly.
+    Sanity check: At chi=64, N_coarse=256, coarse LBM should match baseline exactly.
     """
     chi = 64
     N_coarse = memory_equivalent_grid(N_fine, chi)
 
     print("\n" + "=" * 60)
-    print(f"VALIDATION: Sanity Check (χ={chi}, N_coarse={N_coarse})")
+    print(f"VALIDATION: Sanity Check (chi={chi}, N_coarse={N_coarse})")
     print("=" * 60)
 
     if N_coarse != N_fine:
         print(f"ERROR: Expected N_coarse={N_fine}, got {N_coarse}")
         return None
 
-    print(f"\nAt χ={chi}, N_coarse={N_coarse} = N_fine")
+    print(f"\nAt chi={chi}, N_coarse={N_coarse} = N_fine")
     print("Coarse LBM should give ~0% error (same grid as baseline)")
 
     # Run baseline
@@ -818,7 +818,7 @@ def run_all_validations(N_fine: int = 256, Re: float = 100, chi: int = 12):
     # 2. Interpolation error floor
     results['interpolation'] = validate_interpolation_error(N_fine, N_coarse, Re)
 
-    # 3. χ=64 sanity check
+    # 3. chi=64 sanity check
     results['sanity_chi64'] = validate_chi64_sanity_check(N_fine, Re)
 
     # Summary
@@ -838,7 +838,7 @@ def run_all_validations(N_fine: int = 256, Re: float = 100, chi: int = 12):
 
     san = results['sanity_chi64']
     if san:
-        print(f"\n3. χ=64 sanity check:")
+        print(f"\n3. chi=64 sanity check:")
         print(f"   Error: {san['error']*100:.4f}% ", end="")
         print("✓" if san['error'] < 1e-10 else "✗")
 
@@ -865,7 +865,7 @@ def create_taylor_green_comparison_gif(N_fine: int = 256, N_coarse: int = 48, Re
 
     U0 = 0.1
 
-    # Compute τ_decay for both grids
+    # Compute tau_decay for both grids
     nu_fine = U0 * N_fine / Re
     k_fine = 2 * np.pi / N_fine
     tau_decay_fine = 1 / (2 * nu_fine * k_fine**2)
@@ -874,11 +874,11 @@ def create_taylor_green_comparison_gif(N_fine: int = 256, N_coarse: int = 48, Re
     k_coarse = 2 * np.pi / N_coarse
     tau_decay_coarse = 1 / (2 * nu_coarse * k_coarse**2)
 
-    # Simulation parameters - go to 3×τ_decay
+    # Simulation parameters - go to 3×tau_decay
     t_max_fine = int(3 * tau_decay_fine)
     t_max_coarse = int(3 * tau_decay_coarse)
 
-    # Frame intervals (at same t/τ ratios)
+    # Frame intervals (at same t/tau ratios)
     t_ratios = np.linspace(0, 3, n_frames)
     t_frames_fine = (t_ratios * tau_decay_fine).astype(int)
     t_frames_coarse = (t_ratios * tau_decay_coarse).astype(int)
@@ -965,7 +965,7 @@ def create_taylor_green_comparison_gif(N_fine: int = 256, N_coarse: int = 48, Re
     plt.colorbar(im_fine, ax=axes[0], label='|u|')
     plt.colorbar(im_coarse, ax=axes[1], label='|u|')
 
-    time_text = fig.suptitle(f't/τ_decay = 0.00', fontsize=14)
+    time_text = fig.suptitle(f't/tau_decay = 0.00', fontsize=14)
 
     def update(frame):
         ux_fine, uy_fine, speed_fine = frames_fine[frame]
@@ -979,7 +979,7 @@ def create_taylor_green_comparison_gif(N_fine: int = 256, N_coarse: int = 48, Re
         im_coarse.set_array(speed_coarse.T)
         Q_coarse.set_UVC(ux_coarse[::skip_coarse, ::skip_coarse], uy_coarse[::skip_coarse, ::skip_coarse])
 
-        time_text.set_text(f't/τ_decay = {t_ratios[frame]:.2f}')
+        time_text.set_text(f't/tau_decay = {t_ratios[frame]:.2f}')
         return im_fine, im_coarse, Q_fine, Q_coarse, time_text
 
     anim = FuncAnimation(fig, update, frames=len(frames_fine), interval=100, blit=False)
@@ -1173,7 +1173,7 @@ def create_cylinder_comparison_gif(N_fine: int = 256, N_coarse: int = 48, Re: fl
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Test memory comparison for χ=12")
+    parser = argparse.ArgumentParser(description="Test memory comparison for chi=12")
     parser.add_argument("--chi", type=int, default=12, help="Bond dimension")
     parser.add_argument("--sim", type=str, default="cavity",
                         choices=["cavity", "taylor_green", "cylinder", "all"],
@@ -1220,7 +1220,7 @@ if __name__ == "__main__":
         else:
             # Run actual experiments
             print("=" * 60)
-            print(f"Memory Comparison Test: χ={chi}")
+            print(f"Memory Comparison Test: chi={chi}")
             print(f"  N_fine=256, N_coarse={N_coarse}")
             print(f"  Memory: {memory:,} floats")
             print("=" * 60)

@@ -44,7 +44,7 @@ from tn.compression import field_to_qtt, qtt_to_field
 CHI_VALUES = [6, 8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 48, 56, 64]
 N_FINE = 256
 RE = 100
-CONVERGENCE_TOL = 1e-6
+CONVERGENCE_TOL = 1e-5
 
 # Sampling times from find_t_sampling.py results
 T_SAMPLING_TG = 6500
@@ -104,7 +104,7 @@ def run_cavity_vanilla(N: int, Re: float, u_lid: float = 0.1,
     tau = 3 * nu + 0.5
 
     if tau <= 0.5 or tau > 2.0:
-        raise ValueError(f"Unstable τ={tau:.4f} for N={N}, Re={Re}")
+        raise ValueError(f"Unstable tau={tau:.4f} for N={N}, Re={Re}")
 
     walls, lid = create_cavity_walls(N)
     u_wall = np.array([u_lid, 0.0])
@@ -319,7 +319,7 @@ def get_cylinder_solid_mask(N: int) -> np.ndarray:
 # =============================================================================
 
 def get_baselines(sims: list, verbose: bool = True) -> dict:
-    """Run all baselines (sequential, shared across all χ values)."""
+    """Run all baselines (sequential, shared across all chi values)."""
     baselines = {}
 
     if 'cavity' in sims:
@@ -339,7 +339,7 @@ def get_baselines(sims: list, verbose: bool = True) -> dict:
         u, tau_decay = run_taylor_green_vanilla(N_FINE, RE, T_SAMPLING_TG, verbose=verbose)
         elapsed = time.time() - start
         if verbose:
-            print(f"  Taylor-Green baseline: τ_decay={tau_decay:.1f}, time={elapsed:.1f}s")
+            print(f"  Taylor-Green baseline: tau_decay={tau_decay:.1f}, time={elapsed:.1f}s")
         baselines['taylor_green'] = {'u': u, 't': T_SAMPLING_TG, 'tau_decay': tau_decay}
 
     if 'cylinder' in sims:
@@ -360,13 +360,13 @@ def get_baselines(sims: list, verbose: bool = True) -> dict:
 # =============================================================================
 
 def run_single_task(args: tuple) -> dict:
-    """Run TN-LBM and coarse LBM for one (simulation, χ) pair."""
+    """Run TN-LBM and coarse LBM for one (simulation, chi) pair."""
     sim_type, chi, baseline_data = args
 
     N_coarse = memory_equivalent_grid(N_FINE, chi)
     memory = compute_memory('tn', N_FINE, chi)
 
-    print(f"  Starting: {sim_type}, χ={chi}, N_coarse={N_coarse}")
+    print(f"  Starting: {sim_type}, chi={chi}, N_coarse={N_coarse}")
     start = time.time()
 
     if sim_type == 'cavity':
@@ -424,7 +424,7 @@ def run_single_task(args: tuple) -> dict:
         raise ValueError(f"Unknown simulation type: {sim_type}")
 
     elapsed = time.time() - start
-    print(f"  Finished: {sim_type}, χ={chi}, err_tn={error_tn:.4e}, err_coarse={error_coarse:.4e}, time={elapsed:.1f}s")
+    print(f"  Finished: {sim_type}, chi={chi}, err_tn={error_tn:.4e}, err_coarse={error_coarse:.4e}, time={elapsed:.1f}s")
 
     return {
         'sim': sim_type,
@@ -502,7 +502,7 @@ def main():
     print("Memory Comparison Experiments")
     print("=" * 60)
     print(f"Simulations: {sims}")
-    print(f"χ values: {chi_values}")
+    print(f"chi values: {chi_values}")
     print(f"N_fine: {N_FINE}")
     print(f"Re: {RE}")
     print(f"Cores: {n_cores}")
@@ -541,7 +541,7 @@ def main():
     for sim in sims:
         sim_results = sorted([r for r in results if r['sim'] == sim], key=lambda x: x['chi'])
         print(f"\n{sim.upper()}:")
-        print(f"{'χ':>4} | {'Memory':>10} | {'N_coarse':>8} | {'TN Error':>12} | {'Coarse Error':>12} | {'Winner':>8}")
+        print(f"{'chi':>4} | {'Memory':>10} | {'N_coarse':>8} | {'TN Error':>12} | {'Coarse Error':>12} | {'Winner':>8}")
         print("-" * 70)
         for r in sim_results:
             winner = "TN" if r['error_tn'] < r['error_coarse'] else "Coarse"
