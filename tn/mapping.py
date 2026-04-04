@@ -185,6 +185,121 @@ def diagonal_topright_unflatten(flat, metadata):
 
 
 # =============================================================================
+# Interleaved (scale-ordered) mapping - for O(log N) 2D streaming
+# =============================================================================
+
+def _interleave_bits(x, y, L):
+    """
+    Interleave bits of x and y coordinates.
+
+    For coordinates x = x_{L-1}...x_1 x_0 and y = y_{L-1}...y_1 y_0,
+    produces index I with bits: (y_{L-1} x_{L-1}) ... (y_1 x_1) (y_0 x_0)
+
+    Convention (following Gross et al.):
+    - Bit 2k of I is x_k
+    - Bit 2k+1 of I is y_k
+
+    This means: I = sum_{k=0}^{L-1} (x_k * 2^{2k} + y_k * 2^{2k+1})
+
+    Args:
+        x: x-coordinate (0 to 2^L - 1)
+        y: y-coordinate (0 to 2^L - 1)
+        L: number of bits per coordinate
+
+    Returns:
+        I: interleaved index (0 to 2^{2L} - 1)
+    """
+    I = 0
+    for k in range(L):
+        x_bit = (x >> k) & 1
+        y_bit = (y >> k) & 1
+        I |= (x_bit << (2 * k))       # x_k goes to bit 2k
+        I |= (y_bit << (2 * k + 1))   # y_k goes to bit 2k+1
+    return I
+
+
+def _deinterleave_bits(I, L):
+    """
+    Deinterleave bits to recover x and y coordinates.
+
+    Inverse of _interleave_bits.
+
+    Args:
+        I: interleaved index
+        L: number of bits per coordinate
+
+    Returns:
+        (x, y): coordinates
+    """
+    x = 0
+    y = 0
+    for k in range(L):
+        x_bit = (I >> (2 * k)) & 1
+        y_bit = (I >> (2 * k + 1)) & 1
+        x |= (x_bit << k)
+        y |= (y_bit << k)
+    return x, y
+
+
+def interleaved_flatten(field_2d):
+    """
+    Flatten 2D field using interleaved (scale-ordered) mapping.
+
+    Key property: x-shift and y-shift become LOCAL operations in 1D.
+    - x-shift by 1 only affects even-positioned bits (0, 2, 4, ...)
+    - y-shift by 1 only affects odd-positioned bits (1, 3, 5, ...)
+
+    This enables O(log N) streaming with bond dimension chi = 2.
+
+    For a point (x, y) where x, y in [0, N-1] with N = 2^L:
+    - The 1D index has 2L bits
+    - Bit 2k is x_k, bit 2k+1 is y_k
+
+    Args:
+        field_2d: array of shape (n, n), n must be power of 2
+
+    Returns:
+        flat: array of shape (n * n,)
+        metadata: dict for reconstruction
+    """
+    n = field_2d.shape[0]
+    if field_2d.shape[1] != n:
+        raise ValueError(f"Field must be square, got {field_2d.shape}")
+    if n & (n - 1) != 0:
+        raise ValueError(f"n must be power of 2, got {n}")
+
+    L = int(np.log2(n))
+    total = n * n
+
+    # Build coordinate mapping
+    flat = np.zeros(total, dtype=field_2d.dtype)
+
+    for y in range(n):
+        for x in range(n):
+            I = _interleave_bits(x, y, L)
+            flat[I] = field_2d[y, x]  # field_2d is (ny, nx) = (y, x) indexed
+
+    return flat, {'shape': field_2d.shape, 'mapping': 'interleaved', 'L': L}
+
+
+def interleaved_unflatten(flat, metadata):
+    """Inverse of interleaved_flatten."""
+    shape = metadata['shape']
+    L = metadata['L']
+    n = shape[0]
+
+    field_2d = np.zeros(shape, dtype=flat.dtype)
+
+    for I in range(len(flat)):
+        if I < n * n:
+            x, y = _deinterleave_bits(I, L)
+            if x < n and y < n:
+                field_2d[y, x] = flat[I]
+
+    return field_2d
+
+
+# =============================================================================
 # Hilbert curve mapping
 # =============================================================================
 
@@ -241,6 +356,7 @@ MAPPINGS = {
     'diagonal_tl': (diagonal_topleft_flatten, diagonal_topleft_unflatten),
     'diagonal_tr': (diagonal_topright_flatten, diagonal_topright_unflatten),
     'hilbert': (hilbert_flatten, hilbert_unflatten),
+    'interleaved': (interleaved_flatten, interleaved_unflatten),
 }
 
 # D2Q9 velocity directions:

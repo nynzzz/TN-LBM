@@ -15,11 +15,17 @@ def field_to_qtt(field, max_bond=None, mapping='snake'):
     Args:
         field: numpy array, shape (N,) for 1D or (nx, ny) for 2D
         max_bond: optional max bond dimension for truncation
-        mapping: '2D linearization: 'snake' (row-major) or 'hilbert'
+        mapping: 2D linearization: 'snake', 'hilbert', or 'interleaved'
 
     Returns:
         mps: quimb MatrixProductState
         metadata: dict with original_shape, padded_size, L, mapping info
+
+    Note on interleaved mapping:
+        For 2D grids, interleaved mapping produces an MPS with 2L sites
+        (where L = bits per coordinate). This enables O(log N) streaming.
+        The 'L' in metadata refers to bits per coordinate for interleaved,
+        while for other mappings it's total bits.
     """
     original_shape = field.shape
 
@@ -32,30 +38,65 @@ def field_to_qtt(field, max_bond=None, mapping='snake'):
 
     N = len(flat)
 
-    # find L such that 2^L >= N
-    L = int(np.ceil(np.log2(N)))
-    padded_size = 2**L
+    # For interleaved mapping, L is bits per coordinate
+    # MPS will have 2L sites
+    if mapping == 'interleaved':
+        # Grid is N x N, so N^2 total points
+        # L = log2(N) where N is grid dimension
+        L_coord = map_meta['L']  # bits per coordinate (from mapping)
+        total_sites = 2 * L_coord
+        padded_size = 2**(2 * L_coord)  # N^2
 
-    # pad if necessary
-    if N < padded_size:
-        flat = np.pad(flat, (0, padded_size - N), mode='constant', constant_values=0)
+        # pad if necessary
+        if N < padded_size:
+            flat = np.pad(flat, (0, padded_size - N), mode='constant', constant_values=0)
 
-    # reshape to (2, 2, ..., 2) with L dimensions
-    tensor = flat.reshape([2] * L)
+        # reshape to (2, 2, ..., 2) with 2L dimensions
+        tensor = flat.reshape([2] * total_sites)
 
-    # convert to MPS
-    if max_bond is not None:
-        mps = qtn.MatrixProductState.from_dense(tensor, dims=[2]*L, max_bond=max_bond)
+        # convert to MPS
+        if max_bond is not None:
+            mps = qtn.MatrixProductState.from_dense(tensor, dims=[2]*total_sites, max_bond=max_bond)
+        else:
+            mps = qtn.MatrixProductState.from_dense(tensor, dims=[2]*total_sites)
+
+        metadata = {
+            'original_shape': original_shape,
+            'padded_size': padded_size,
+            'L': L_coord,  # bits per coordinate for interleaved
+            'total_sites': total_sites,
+            'original_size': N,
+            'mapping': 'interleaved',
+            'map_meta': map_meta
+        }
     else:
-        mps = qtn.MatrixProductState.from_dense(tensor, dims=[2]*L)
+        # Standard case: snake, hilbert, etc.
+        # find L such that 2^L >= N
+        L = int(np.ceil(np.log2(N)))
+        padded_size = 2**L
 
-    metadata = {
-        'original_shape': original_shape,
-        'padded_size': padded_size,
-        'L': L,
-        'original_size': N,
-        'map_meta': map_meta
-    }
+        # pad if necessary
+        if N < padded_size:
+            flat = np.pad(flat, (0, padded_size - N), mode='constant', constant_values=0)
+
+        # reshape to (2, 2, ..., 2) with L dimensions
+        tensor = flat.reshape([2] * L)
+
+        # convert to MPS
+        if max_bond is not None:
+            mps = qtn.MatrixProductState.from_dense(tensor, dims=[2]*L, max_bond=max_bond)
+        else:
+            mps = qtn.MatrixProductState.from_dense(tensor, dims=[2]*L)
+
+        metadata = {
+            'original_shape': original_shape,
+            'padded_size': padded_size,
+            'L': L,
+            'total_sites': L,
+            'original_size': N,
+            'mapping': mapping if field.ndim > 1 else 'none',
+            'map_meta': map_meta
+        }
 
     return mps, metadata
 
@@ -80,7 +121,9 @@ def qtt_to_field(mps, metadata):
 
     # unflatten based on mapping
     map_meta = metadata['map_meta']
-    if map_meta['mapping'] == 'none':
+    mapping = metadata.get('mapping', map_meta.get('mapping', 'none'))
+
+    if mapping == 'none':
         # 1D case
         return flat
     else:
@@ -133,8 +176,8 @@ def compression_stats(original, mps, metadata):
     mps_bytes = mps_memory(mps)
     original_bytes = original.nbytes
 
-    L = metadata['L']
-    bond_dims = [mps.bond_size(i, i+1) for i in range(L-1)]
+    total_sites = metadata.get('total_sites', metadata['L'])
+    bond_dims = [mps.bond_size(i, i+1) for i in range(total_sites-1)]
 
     return {
         'compression_ratio': original_bytes / mps_bytes,
