@@ -32,6 +32,20 @@ from .streaming import (
     stream_dense_2d,
 )
 
+from .boundary import (
+    mask_to_mps,
+    precompute_cavity_bc,
+    apply_mps_boundary,
+)
+
+from .collision import (
+    build_ones_mps,
+    compute_moments_mps,
+    compute_inverse_density_mps,
+    compute_equilibrium_mps,
+    collide_bgk_mps,
+)
+
 __all__ = [
     # Arithmetic
     'mps_add',
@@ -48,4 +62,14 @@ __all__ = [
     'stream_population_2d',
     'stream_all_populations',
     'stream_dense_2d',
+    # Boundary conditions
+    'mask_to_mps',
+    'precompute_cavity_bc',
+    'apply_mps_boundary',
+    # Collision
+    'build_ones_mps',
+    'compute_moments_mps',
+    'compute_inverse_density_mps',
+    'compute_equilibrium_mps',
+    'collide_bgk_mps',
 ]

@@ -69,6 +69,7 @@ def mps_hadamard(mps_a, mps_b, max_bond=None, cutoff=1e-10):
     2. SVD truncate to max_bond
 
     This is O(L * chi^4) where L = number of sites.
+    Robust to different tensor index orderings from quimb operations.
 
     Args:
         mps_a: first MPS
@@ -80,63 +81,84 @@ def mps_hadamard(mps_a, mps_b, max_bond=None, cutoff=1e-10):
         mps_c: Hadamard product MPS
     """
     L = len(mps_a.tensors)
-
-    # Build the product MPS site by site
-    # quimb MPS tensor shapes:
-    # - Site 0 (left edge): (phys, bond_right)
-    # - Site i (middle): (bond_left, phys, bond_right)
-    # - Site L-1 (right edge): (bond_left, phys)
+    site_ind_id = mps_a.site_ind_id  # e.g. 'k{}'
 
     new_tensors = []
 
     for i in range(L):
-        A_tensor = mps_a[i].data
-        B_tensor = mps_b[i].data
+        A_t = mps_a[i]
+        B_t = mps_b[i]
 
-        A_shape = A_tensor.shape
-        B_shape = B_tensor.shape
+        # Find physical index by name (e.g. 'k0', 'k1', ...)
+        phys_ind = site_ind_id.format(i)
+
+        # Reorder A tensor to put physical index in standard position:
+        # edge (2D): (phys, bond) for left, (bond, phys) for right
+        # middle (3D): (bond_left, phys, bond_right)
+        A_data = _reorder_tensor(A_t, phys_ind, i, L)
+        B_data = _reorder_tensor(B_t, phys_ind, i, L)
+
+        A_shape = A_data.shape
+        B_shape = B_data.shape
 
         if i == 0:
             # Left edge: (phys, bond_right)
-            # C[p, ra*rb] = A[p, ra] * B[p, rb]
-            if len(A_shape) == 2:
-                C_data = np.einsum('pr,ps->prs', A_tensor, B_tensor)
-                C_data = C_data.reshape(A_shape[0], A_shape[1] * B_shape[1])
-            else:
-                raise ValueError(f"Unexpected left edge shape: {A_shape}")
+            C_data = np.einsum('pr,ps->prs', A_data, B_data)
+            C_data = C_data.reshape(A_shape[0], A_shape[1] * B_shape[1])
 
         elif i == L - 1:
             # Right edge: (bond_left, phys)
-            # C[la*lb, p] = A[la, p] * B[lb, p]
-            if len(A_shape) == 2:
-                C_data = np.einsum('lp,mp->lmp', A_tensor, B_tensor)
-                C_data = C_data.reshape(A_shape[0] * B_shape[0], A_shape[1])
-            else:
-                raise ValueError(f"Unexpected right edge shape: {A_shape}")
+            C_data = np.einsum('lp,mp->lmp', A_data, B_data)
+            C_data = C_data.reshape(A_shape[0] * B_shape[0], A_shape[1])
 
         else:
             # Middle site: (bond_left, phys, bond_right)
-            # C[la*lb, p, ra*rb] = A[la, p, ra] * B[lb, p, rb]
-            if len(A_shape) == 3:
-                C_data = np.einsum('lpr,mps->lmprs', A_tensor, B_tensor)
-                new_left = A_shape[0] * B_shape[0]
-                new_phys = A_shape[1]
-                new_right = A_shape[2] * B_shape[2]
-                C_data = C_data.reshape(new_left, new_phys, new_right)
-            else:
-                raise ValueError(f"Unexpected middle shape: {A_shape}")
+            C_data = np.einsum('lpr,mps->lmprs', A_data, B_data)
+            new_left = A_shape[0] * B_shape[0]
+            new_phys = A_shape[1]
+            new_right = A_shape[2] * B_shape[2]
+            C_data = C_data.reshape(new_left, new_phys, new_right)
 
         new_tensors.append(C_data)
 
-    # Build MPS from tensors using quimb constructor
-    # Shape 'lpr' = (left_bond, physical, right_bond)
     mps_c = qtn.MatrixProductState(new_tensors, shape='lpr')
 
-    # Compress to target bond dimension
     if max_bond is not None:
         mps_c.compress(max_bond=max_bond, cutoff=cutoff)
 
     return mps_c
+
+
+def _reorder_tensor(tensor, phys_ind, site_idx, _num_sites):
+    """
+    Reorder a quimb tensor to standard lpr format.
+
+    Returns numpy array with shape:
+    - Left edge (site 0): (phys, bond_right)
+    - Middle: (bond_left, phys, bond_right)
+    - Right edge (site L-1): (bond_left, phys)
+    """
+    inds = tensor.inds
+    data = tensor.data
+    phys_pos = inds.index(phys_ind)
+
+    if len(inds) == 2:
+        # Edge tensor: put phys first for left edge, last for right edge
+        if site_idx == 0:
+            # Want (phys, bond)
+            if phys_pos != 0:
+                data = data.T
+        else:
+            # Want (bond, phys)
+            if phys_pos != 1:
+                data = data.T
+    elif len(inds) == 3:
+        # Middle tensor: want (bond_left, phys, bond_right)
+        if phys_pos != 1:
+            # Move physical index to position 1
+            data = np.moveaxis(data, phys_pos, 1)
+
+    return data
 
 
 def mps_subtract(mps_a, mps_b, max_bond=None, cutoff=1e-10):
