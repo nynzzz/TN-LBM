@@ -137,7 +137,8 @@ def compute_inverse_density_mps(rho_mps, ones_mps, n_grid,
 
 
 def compute_equilibrium_mps(mps_list, lattice, n_grid,
-                             max_bond=None, cutoff=1e-10):
+                             max_bond=None, cutoff=1e-10,
+                             return_moments=False):
     """
     Compute all 9 equilibrium distributions in MPS space.
 
@@ -151,10 +152,14 @@ def compute_equilibrium_mps(mps_list, lattice, n_grid,
         n_grid: grid side length
         max_bond: bond dimension truncation for Hadamard products
         cutoff: SVD cutoff
+        return_moments: if True, also return (rho, rhou_x, rhou_y, u_x, u_y) —
+                        all already computed internally, zero extra cost
 
     Returns:
         f_eq_list: list of 9 equilibrium MPS
+        If return_moments=True: (f_eq_list, (rho, rhou_x, rhou_y, u_x, u_y))
     """
+
     num_sites = len(mps_list[0].tensors)
     cs2 = lattice.cs2       # 1/3
     cs4 = cs2 * cs2         # 1/9
@@ -244,11 +249,14 @@ def compute_equilibrium_mps(mps_list, lattice, n_grid,
         f_eq[i] = mps_hadamard(rho_scaled, bracket,
                                 max_bond=max_bond, cutoff=cutoff)
 
+    if return_moments:
+        return f_eq, (rho, rhou_x, rhou_y, u_x, u_y)
     return f_eq
 
 
 def collide_bgk_mps(mps_list, lattice, tau, n_grid,
-                     max_bond=None, cutoff=1e-10):
+                     max_bond=None, cutoff=1e-10,
+                     return_moments=False):
     """
     Full BGK collision in MPS space.
 
@@ -261,12 +269,20 @@ def collide_bgk_mps(mps_list, lattice, tau, n_grid,
         n_grid: grid side length
         max_bond: bond dimension truncation
         cutoff: SVD cutoff
+        return_moments: if True, also return (rho, rhou_x, rhou_y, u_x, u_y) —
+                        all already computed during equilibrium, zero extra cost
 
     Returns:
         f_new_list: list of 9 post-collision MPS
+        If return_moments=True: (f_new_list, (rho, rhou_x, rhou_y, u_x, u_y))
     """
-    f_eq = compute_equilibrium_mps(mps_list, lattice, n_grid,
-                                    max_bond=max_bond, cutoff=cutoff)
+    result = compute_equilibrium_mps(mps_list, lattice, n_grid,
+                                      max_bond=max_bond, cutoff=cutoff,
+                                      return_moments=return_moments)
+    if return_moments:
+        f_eq, moments = result
+    else:
+        f_eq = result
 
     omega = 1.0 / tau
     one_minus_omega = 1.0 - omega
@@ -277,4 +293,6 @@ def collide_bgk_mps(mps_list, lattice, tau, n_grid,
         term2 = mps_scale(f_eq[i], omega)
         f_new.append(mps_add(term1, term2, max_bond=max_bond, cutoff=cutoff))
 
+    if return_moments:
+        return f_new, moments
     return f_new

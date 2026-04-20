@@ -409,7 +409,7 @@ def _build_shift_mpo_2d_snake(L, cx, cy, cyclic=False):
 # Public API: Streaming functions
 # =============================================================================
 
-def stream_population_2d_interleaved(mps, L, cx, cy, max_bond=None, cyclic=False):
+def stream_population_2d_interleaved(mps, L, cx, cy, max_bond=None, cyclic=False, cutoff=1e-10):
     """
     Stream a 2D population using interleaved mapping with MPO.
 
@@ -436,19 +436,19 @@ def stream_population_2d_interleaved(mps, L, cx, cy, max_bond=None, cyclic=False
     if isinstance(result, tuple):
         x_mpo, y_mpo = result
         # Apply y-shift first, then x-shift
-        new_mps = mps.gate_with_mpo(y_mpo, max_bond=max_bond)
-        new_mps = new_mps.gate_with_mpo(x_mpo, max_bond=max_bond)
+        new_mps = mps.gate_with_mpo(y_mpo, max_bond=max_bond, cutoff=cutoff)
+        new_mps = new_mps.gate_with_mpo(x_mpo, max_bond=max_bond, cutoff=cutoff)
     else:
         # Axis-aligned shift: single MPO
-        new_mps = mps.gate_with_mpo(result, max_bond=max_bond)
+        new_mps = mps.gate_with_mpo(result, max_bond=max_bond, cutoff=cutoff)
 
     if max_bond is not None:
-        new_mps.compress(max_bond=max_bond)
+        new_mps.compress(max_bond=max_bond, cutoff=cutoff)
 
     return new_mps
 
 
-def stream_population_2d_snake(mps, L, cx, cy, max_bond=None, cyclic=False):
+def stream_population_2d_snake(mps, L, cx, cy, max_bond=None, cyclic=False, cutoff=1e-10):
     """
     Stream a 2D population using snake mapping with MPO.
 
@@ -477,15 +477,15 @@ def stream_population_2d_snake(mps, L, cx, cy, max_bond=None, cyclic=False):
     # LSBs (sites L..2L-1) are y. The MPO builder's "cx" acts on LSBs and "cy" on MSBs
     # (it assumes I = y*N + x), so we swap to correct for the actual C-order layout.
     mpo = _build_shift_mpo_2d_snake(L, cy, cx, cyclic=cyclic)
-    new_mps = mps.gate_with_mpo(mpo, max_bond=max_bond)
+    new_mps = mps.gate_with_mpo(mpo, max_bond=max_bond, cutoff=cutoff)
 
     if max_bond is not None:
-        new_mps.compress(max_bond=max_bond)
+        new_mps.compress(max_bond=max_bond, cutoff=cutoff)
 
     return new_mps
 
 
-def stream_population_2d(mps, metadata, cx, cy, max_bond=None, cyclic=False):
+def stream_population_2d(mps, metadata, cx, cy, max_bond=None, cyclic=False, cutoff=1e-10):
     """
     Stream a single 2D population in MPS format.
 
@@ -510,11 +510,11 @@ def stream_population_2d(mps, metadata, cx, cy, max_bond=None, cyclic=False):
 
     if mapping == 'interleaved':
         L = metadata['L']
-        return stream_population_2d_interleaved(mps, L, cx, cy, max_bond, cyclic=cyclic)
+        return stream_population_2d_interleaved(mps, L, cx, cy, max_bond, cyclic=cyclic, cutoff=cutoff)
 
     if mapping == 'snake':
         L_coord = metadata['L'] // 2  # total bits / 2 = bits per coordinate
-        return stream_population_2d_snake(mps, L_coord, cx, cy, max_bond, cyclic=cyclic)
+        return stream_population_2d_snake(mps, L_coord, cx, cy, max_bond, cyclic=cyclic, cutoff=cutoff)
 
     # Fallback: dense reference for unsupported mappings (e.g. hilbert)
     return _stream_population_2d_reference(mps, metadata, cx, cy, max_bond)

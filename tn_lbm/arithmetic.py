@@ -218,39 +218,32 @@ def mps_sum_value(mps):
     Returns:
         scalar: sum of all elements
     """
-    # Simple approach: convert to dense and sum
-    # For large MPS this defeats the purpose, but for small test cases it works
-    # TODO: Implement efficient contraction with ones vector
-
-    # For now, use a manual contraction approach
-    # Contract each site with the [1,1] vector on the physical index
+    # Contract each site's physical index with [1,1] (sum over bits),
+    # then contract bond indices left-to-right.
+    # Robust to different tensor index orderings from quimb operations.
     L = len(mps.tensors)
+    site_ind_id = mps.site_ind_id
 
-    # Start from left
     result = None
     for i in range(L):
-        tensor_data = mps[i].data
+        tensor = mps[i]
+        phys_ind = site_ind_id.format(i)
+        data = _reorder_tensor(tensor, phys_ind, i, L)
 
-        # Contract physical index with [1, 1]
+        # Sum over physical index (now at standard position after reorder)
         if i == 0:
-            # Shape: (phys, right) -> sum over phys -> (right,)
-            contracted = tensor_data.sum(axis=0)
+            contracted = data.sum(axis=0)       # (phys, right) -> (right,)
         elif i == L - 1:
-            # Shape: (left, phys) -> sum over phys -> (left,)
-            contracted = tensor_data.sum(axis=1)
+            contracted = data.sum(axis=1)       # (left, phys) -> (left,)
         else:
-            # Shape: (left, phys, right) -> sum over phys -> (left, right)
-            contracted = tensor_data.sum(axis=1)
+            contracted = data.sum(axis=1)       # (left, phys, right) -> (left, right)
 
-        # Combine with running result
         if result is None:
             result = contracted
         else:
             if i == L - 1:
-                # Final contraction: (left,) @ (left,) -> scalar
                 result = np.dot(result, contracted)
             else:
-                # (left_prev,) @ (left, right) -> (right,) via einsum
                 result = np.einsum('l,lr->r', result, contracted)
 
     return float(result)

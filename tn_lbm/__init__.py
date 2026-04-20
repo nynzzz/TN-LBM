@@ -38,6 +38,14 @@ from .boundary import (
     apply_mps_boundary,
 )
 
+from .observables import (
+    mps_evaluate_at_index,
+    mps_evaluate_at_point,
+    mps_coarse_field,
+    compute_drag_lift_mps,
+    check_convergence_mps,
+)
+
 from .collision import (
     build_ones_mps,
     compute_moments_mps,
@@ -66,6 +74,12 @@ __all__ = [
     'mask_to_mps',
     'precompute_cavity_bc',
     'apply_mps_boundary',
+    # Observables
+    'mps_evaluate_at_index',
+    'mps_evaluate_at_point',
+    'mps_coarse_field',
+    'compute_drag_lift_mps',
+    'check_convergence_mps',
     # Collision
     'build_ones_mps',
     'compute_moments_mps',

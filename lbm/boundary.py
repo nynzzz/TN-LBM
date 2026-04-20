@@ -95,6 +95,74 @@ def apply_bounce_back_moving_top(lattice: Lattice, f: np.ndarray,
     return f_new
 
 
+def apply_fwbb(lattice: Lattice, f: np.ndarray, lid: np.ndarray,
+               u_wall: np.ndarray, rho_wall: float = 1.0) -> np.ndarray:
+    """
+    Full-way bounce-back (FWBB) with non-cyclic streaming.
+
+    Combined streaming + BC in one step, using pre-streaming populations.
+    Places the effective wall ON the boundary node (Kruger et al. 2017, Ch. 5.3.4).
+    Dense equivalent of tn_lbm.boundary.apply_mps_boundary (Gross et al. Eq 36).
+
+    Replaces: stream() + apply_bounce_back() + apply_bounce_back_moving_top()
+
+    For each population i:
+      f_i^new = m_B_i * f_ibar^pre + non_cyclic_shift(f_i^pre) [+ corr at lid]
+
+    Args:
+        lattice: D2Q9 lattice definition
+        f: post-collision distributions, shape (q, nx, ny)
+        lid: boolean mask for moving lid, shape (nx, ny)
+        u_wall: wall velocity array, shape (2,)
+        rho_wall: wall density (default 1.0)
+
+    Returns:
+        f_new: post-streaming, post-BC distributions
+    """
+    q = lattice.q
+    nx, ny = f.shape[1], f.shape[2]
+    f_new = np.zeros_like(f)
+
+    for i in range(q):
+        cx = int(lattice.c[i, 0])
+        cy = int(lattice.c[i, 1])
+
+        if cx == 0 and cy == 0:
+            f_new[i] = f[i].copy()
+            continue
+
+        opp = lattice.opposite[i]
+
+        # Per-direction boundary mask: 1 where non-cyclic shift gives 0
+        mask = np.zeros((nx, ny), dtype=bool)
+        if cx == 1:  mask[0, :] = True
+        elif cx == -1: mask[nx-1, :] = True
+        if cy == 1:  mask[:, 0] = True
+        elif cy == -1: mask[:, ny-1] = True
+
+        # Non-cyclic streaming: np.roll + zero at boundary
+        streamed = np.roll(np.roll(f[i], cx, axis=0), cy, axis=1)
+        if cx == 1:  streamed[0, :] = 0
+        elif cx == -1: streamed[nx-1, :] = 0
+        if cy == 1:  streamed[:, 0] = 0
+        elif cy == -1: streamed[:, ny-1] = 0
+
+        # Bounce-back at boundary: use pre-streaming opposite population
+        bc = np.where(mask, f[opp], 0.0)
+
+        # Velocity correction at lid
+        lid_overlap = mask & lid
+        if np.any(lid_overlap):
+            c_dot_u = lattice.c[i, 0] * u_wall[0] + lattice.c[i, 1] * u_wall[1]
+            if abs(c_dot_u) > 1e-15:
+                corr = (2.0 * lattice.w[i] * rho_wall / lattice.cs2) * c_dot_u
+                bc = np.where(lid_overlap, bc + corr, bc)
+
+        f_new[i] = bc + streamed
+
+    return f_new
+
+
 def extrapolation_outlet_right(f: np.ndarray) -> np.ndarray:
     """
     Extrapolation outlet boundary condition at right boundary (x=nx-1).

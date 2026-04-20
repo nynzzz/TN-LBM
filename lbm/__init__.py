@@ -11,6 +11,7 @@ from .streaming import stream
 from .boundary import (
     apply_bounce_back,
     apply_bounce_back_moving_top,
+    apply_fwbb,
     equilibrium_inlet_left,
     extrapolation_outlet_right,
     create_cylinder_mask,
@@ -25,6 +26,7 @@ __all__ = [
     "stream",
     "apply_bounce_back",
     "apply_bounce_back_moving_top",
+    "apply_fwbb",
     "equilibrium_inlet_left",
     "extrapolation_outlet_right",
     "create_cylinder_mask",

@@ -188,7 +188,7 @@ def apply_mps_boundary(pre_streaming_list, lattice, bc_data, max_bond=None, cuto
         # Term 2: non-cyclic streaming
         streamed = stream_population_2d(pre_streaming_list[i], metadata,
                                          cx, cy, max_bond=max_bond,
-                                         cyclic=False)
+                                         cyclic=False, cutoff=cutoff)
 
         # Combine: no overlap between mask and shift
         result = mps_add(bc_value, streamed,
