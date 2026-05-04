@@ -36,6 +36,8 @@ from .boundary import (
     mask_to_mps,
     precompute_cavity_bc,
     apply_mps_boundary,
+    precompute_cylinder_bc,
+    apply_mps_cylinder_bc,
 )
 
 from .observables import (
@@ -74,6 +76,8 @@ __all__ = [
     'mask_to_mps',
     'precompute_cavity_bc',
     'apply_mps_boundary',
+    'precompute_cylinder_bc',
+    'apply_mps_cylinder_bc',
     # Observables
     'mps_evaluate_at_index',
     'mps_evaluate_at_point',

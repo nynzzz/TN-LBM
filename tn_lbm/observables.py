@@ -210,20 +210,22 @@ def mps_coarse_field(mps, metadata, coarse_level=1):
     return coarse_dense.reshape(n_coarse, n_coarse)
 
 
-def compute_drag_lift_mps(mps_list, lattice, boundary_mask_mps,
+def compute_drag_lift_mps(mps_list, lattice, boundary_masks,
                            max_bond=None, cutoff=1e-10):
     """
     Compute drag and lift forces using momentum exchange method in MPS space.
 
-    F_alpha = sum_i c_{i,alpha} * (f_i + f_ibar) at boundary nodes
+    F_alpha = sum_i c_{i,alpha} * (f_i + f_ibar) at boundary_i nodes
 
-    In MPS: for each population, mask the sum f_i + f_ibar to boundary nodes
-    and contract to get the total.
+    Each direction needs its OWN boundary mask (fluid nodes one lattice step
+    away from the solid in direction c_i). Using a combined mask causes
+    opposite directions to cancel.
 
     Args:
         mps_list: list of 9 population MPS
         lattice: D2Q9 lattice definition
-        boundary_mask_mps: MPS of boundary mask (1 at boundary, 0 elsewhere)
+        boundary_masks: list of 9 MPS masks (one per direction, None for rest)
+            boundary_masks[i] = MPS of fluid nodes at (solid_pos + c_i)
         max_bond: bond dimension limit for Hadamard products
         cutoff: SVD cutoff
 
@@ -240,11 +242,14 @@ def compute_drag_lift_mps(mps_list, lattice, boundary_mask_mps,
         if cx == 0 and cy == 0:
             continue
 
+        if boundary_masks[i] is None:
+            continue
+
         opp = lattice.opposite[i]
 
-        # f_i + f_ibar at boundary
+        # f_i + f_ibar at this direction's boundary nodes
         f_sum = mps_add(mps_list[i], mps_list[opp], max_bond=max_bond, cutoff=cutoff)
-        f_masked = mps_hadamard(f_sum, boundary_mask_mps, max_bond=max_bond, cutoff=cutoff)
+        f_masked = mps_hadamard(f_sum, boundary_masks[i], max_bond=max_bond, cutoff=cutoff)
         total = mps_sum_value(f_masked)
 
         drag += cx * total

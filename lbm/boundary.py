@@ -163,6 +163,137 @@ def apply_fwbb(lattice: Lattice, f: np.ndarray, lid: np.ndarray,
     return f_new
 
 
+def apply_fwbb_cylinder(lattice, f, cylinder, channel_walls,
+                        u_inlet, rho_inlet=1.0):
+    """
+    Full-way bounce-back for cylinder flow (dense).
+
+    Uses Gross et al. Eq 36 with different b() for each boundary type:
+    - Top/bottom walls: b = f_ibar (Eq 37, no-slip)
+    - Inlet (x=0): b = f_ibar + velocity correction (Eq 38)
+    - Outlet (x=n-1): b = -f_i + equilibrium(rho_0, u_b) (Eq 39, u_b ~ u_inlet)
+
+    Then Eq 40 for the immersed cylinder.
+
+    Args:
+        lattice: D2Q9 lattice definition
+        f: post-collision distributions, shape (q, nx, ny)
+        cylinder: boolean mask for cylinder, shape (nx, ny)
+        channel_walls: boolean mask for top/bottom walls, shape (nx, ny)
+        u_inlet: inlet velocity (scalar, x-direction)
+        rho_inlet: inlet density
+
+    Returns:
+        f_new: post-streaming, post-BC distributions
+    """
+    q = lattice.q
+    nx, ny = f.shape[1], f.shape[2]
+    cs2 = lattice.cs2
+    rho_0 = rho_inlet  # reference density for outlet
+
+    # Compute actual velocity at outlet nodes (Gross Eq 39: u(x in B, t) = u_b)
+    rho_pre = np.sum(f, axis=0)
+    rho_safe = np.where(rho_pre > 1e-15, rho_pre, 1.0)
+    ux_pre = np.sum(f * lattice.c[:, 0, None, None], axis=0) / rho_safe
+    uy_pre = np.sum(f * lattice.c[:, 1, None, None], axis=0) / rho_safe
+    # Clamp velocity to prevent overflow in equilibrium computation
+    u_max = 0.5  # well below cs for stability
+    ux_pre = np.clip(ux_pre, -u_max, u_max)
+    uy_pre = np.clip(uy_pre, -u_max, u_max)
+
+    # --- Step 1: Non-cyclic streaming + Eq 36 with per-region b() ---
+    f_streamed = np.zeros_like(f)
+
+    for i in range(q):
+        cx = int(lattice.c[i, 0])
+        cy = int(lattice.c[i, 1])
+
+        if cx == 0 and cy == 0:
+            f_streamed[i] = f[i].copy()
+            continue
+
+        opp = lattice.opposite[i]
+
+        # Per-direction boundary mask
+        mask = np.zeros((nx, ny), dtype=bool)
+        if cx == 1:  mask[0, :] = True
+        elif cx == -1: mask[nx-1, :] = True
+        if cy == 1:  mask[:, 0] = True
+        elif cy == -1: mask[:, ny-1] = True
+
+        # Non-cyclic streaming
+        streamed = np.roll(np.roll(f[i], cx, axis=0), cy, axis=1)
+        if cx == 1:  streamed[0, :] = 0
+        elif cx == -1: streamed[nx-1, :] = 0
+        if cy == 1:  streamed[:, 0] = 0
+        elif cy == -1: streamed[:, ny-1] = 0
+
+        # Split mask into boundary regions (mutually exclusive, wall priority)
+        inlet_region = np.zeros((nx, ny), dtype=bool)
+        outlet_region = np.zeros((nx, ny), dtype=bool)
+        wall_region = np.zeros((nx, ny), dtype=bool)
+
+        if cx == 1:  inlet_region[0, :] = True       # from left
+        if cx == -1: outlet_region[nx-1, :] = True    # from right
+        if cy == 1:  wall_region[:, 0] = True          # from bottom
+        if cy == -1: wall_region[:, ny-1] = True       # from top
+
+        # Intersect with the actual mask (handles diagonals covering multiple edges)
+        inlet_region &= mask
+        outlet_region &= mask
+        wall_region &= mask
+
+        # Make mutually exclusive: walls take priority at corners
+        inlet_region &= ~wall_region
+        outlet_region &= ~wall_region
+
+        # Compute b() for each region
+        bc = np.zeros((nx, ny))
+
+        # Walls (Eq 37): b = f_ibar
+        bc += np.where(wall_region, f[opp], 0.0)
+
+        # Inlet (Eq 38): b = f_ibar + velocity correction
+        inlet_bc = f[opp].copy()
+        c_dot_u_inlet = lattice.c[i, 0] * u_inlet  # u_inlet is x-only
+        if abs(c_dot_u_inlet) > 1e-15:
+            inlet_bc = inlet_bc + (2.0 * lattice.w[i] * rho_inlet / cs2) * c_dot_u_inlet
+        bc += np.where(inlet_region, inlet_bc, 0.0)
+
+        # Outlet (Eq 39): b = -f_i + 2*w_i*rho_0*(1 + cu^2/(2cs4) - u^2/(2cs2))
+        # u_b = actual velocity at outlet nodes (not constant!)
+        cu_out = lattice.c[i, 0] * ux_pre + lattice.c[i, 1] * uy_pre
+        usq_out = ux_pre**2 + uy_pre**2
+        f_eq_out = 2.0 * lattice.w[i] * rho_0 * (
+            1.0 + cu_out**2 / (2.0 * cs2**2) - usq_out / (2.0 * cs2)
+        )
+        outlet_bc = -f[i] + f_eq_out
+        bc += np.where(outlet_region, outlet_bc, 0.0)
+
+        f_streamed[i] = bc + streamed
+
+    # --- Step 2: Immersed cylinder (Eq 40) ---
+    f_new = np.zeros_like(f_streamed)
+
+    for i in range(q):
+        cx = int(lattice.c[i, 0])
+        cy = int(lattice.c[i, 1])
+        opp = lattice.opposite[i]
+
+        fluid_part = np.where(cylinder, 0.0, f_streamed[i])
+
+        if cx == 0 and cy == 0:
+            f_new[i] = fluid_part
+            continue
+
+        cyl_bounce = np.where(cylinder, f_streamed[opp], 0.0)
+        shifted_bounce = np.roll(np.roll(cyl_bounce, cx, axis=0), cy, axis=1)
+
+        f_new[i] = fluid_part + shifted_bounce
+
+    return f_new
+
+
 def extrapolation_outlet_right(f: np.ndarray) -> np.ndarray:
     """
     Extrapolation outlet boundary condition at right boundary (x=nx-1).
