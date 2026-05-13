@@ -260,14 +260,15 @@ def apply_fwbb_cylinder(lattice, f, cylinder, channel_walls,
             inlet_bc = inlet_bc + (2.0 * lattice.w[i] * rho_inlet / cs2) * c_dot_u_inlet
         bc += np.where(inlet_region, inlet_bc, 0.0)
 
-        # Outlet (Eq 39): b = -f_i + 2*w_i*rho_0*(1 + cu^2/(2cs4) - u^2/(2cs2))
+        # Outlet (Eq 39): b(f_ibar) = -f_ibar + 2*w_i*rho_0*(1 + cu^2/(2cs4) - u^2/(2cs2))
+        # b() takes f_ibar as INPUT and returns new f_i. So we use -f[opp], not -f[i]!
         # u_b = actual velocity at outlet nodes (not constant!)
         cu_out = lattice.c[i, 0] * ux_pre + lattice.c[i, 1] * uy_pre
         usq_out = ux_pre**2 + uy_pre**2
         f_eq_out = 2.0 * lattice.w[i] * rho_0 * (
             1.0 + cu_out**2 / (2.0 * cs2**2) - usq_out / (2.0 * cs2)
         )
-        outlet_bc = -f[i] + f_eq_out
+        outlet_bc = -f[opp] + f_eq_out
         bc += np.where(outlet_region, outlet_bc, 0.0)
 
         f_streamed[i] = bc + streamed

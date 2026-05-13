@@ -95,14 +95,16 @@ def compute_moments_mps(mps_list, lattice, max_bond=None, cutoff=1e-10):
 
 
 def compute_inverse_density_mps(rho_mps, ones_mps, n_grid,
-                                 max_bond=None, cutoff=1e-10):
+                                 max_bond=None, cutoff=1e-10, order=2):
     """
-    Approximate 1/rho via second-order Taylor expansion (Gross et al. Eq 34).
+    Approximate 1/rho via Taylor expansion around mean density (Gross et al. Eq 34).
 
-    1/rho ~ 1/rho_0 - delta_rho/rho_0^2 + delta_rho^2/rho_0^3
+    Expansion in delta = (rho - rho_0)/rho_0, exact form 1/rho = (1/rho_0)*(1+delta)^(-1):
+        order=1: 1/rho ~ 1/rho_0 - delta_rho/rho_0^2
+        order=2: 1/rho ~ 1/rho_0 - delta_rho/rho_0^2 + delta_rho^2/rho_0^3       (default)
+        order=3: 1/rho ~ 1/rho_0 - delta_rho/rho_0^2 + delta_rho^2/rho_0^3 - delta_rho^3/rho_0^4
 
-    Where rho_0 = mean density (scalar), delta_rho = rho - rho_0.
-    Error: O(Ma^6), negligible compared to LBM's O(Ma^2).
+    Error: O(Ma^(2(order+1))). Reproduces Gross Appendix B fitted exponents.
 
     Args:
         rho_mps: density MPS
@@ -110,10 +112,14 @@ def compute_inverse_density_mps(rho_mps, ones_mps, n_grid,
         n_grid: grid side length (total points = n_grid^2)
         max_bond: bond dimension truncation
         cutoff: SVD cutoff
+        order: Taylor order (1, 2, or 3). Default 2.
 
     Returns:
         inv_rho_mps: MPS approximation of 1/rho
     """
+    if order not in (1, 2, 3):
+        raise ValueError(f"order must be 1, 2, or 3, got {order}")
+
     # Mean density (scalar)
     rho_0 = mps_sum_value(rho_mps) / (n_grid ** 2)
 
@@ -121,24 +127,31 @@ def compute_inverse_density_mps(rho_mps, ones_mps, n_grid,
     delta_rho = mps_subtract(rho_mps, mps_scale(ones_mps, rho_0),
                               max_bond=max_bond, cutoff=cutoff)
 
-    # delta_rho^2 (1 Hadamard)
-    delta_rho_sq = mps_hadamard(delta_rho, delta_rho,
-                                 max_bond=max_bond, cutoff=cutoff)
-
-    # Taylor: 1/rho ~ (1/rho_0) - (1/rho_0^2)*delta_rho + (1/rho_0^3)*delta_rho^2
+    # Order 1: 1/rho_0 - delta_rho/rho_0^2
     term0 = mps_scale(ones_mps, 1.0 / rho_0)
     term1 = mps_scale(delta_rho, -1.0 / rho_0 ** 2)
-    term2 = mps_scale(delta_rho_sq, 1.0 / rho_0 ** 3)
-
     inv_rho = mps_add(term0, term1, max_bond=max_bond, cutoff=cutoff)
-    inv_rho = mps_add(inv_rho, term2, max_bond=max_bond, cutoff=cutoff)
+
+    if order >= 2:
+        # + delta_rho^2 / rho_0^3
+        delta_rho_sq = mps_hadamard(delta_rho, delta_rho,
+                                     max_bond=max_bond, cutoff=cutoff)
+        term2 = mps_scale(delta_rho_sq, 1.0 / rho_0 ** 3)
+        inv_rho = mps_add(inv_rho, term2, max_bond=max_bond, cutoff=cutoff)
+
+        if order >= 3:
+            # - delta_rho^3 / rho_0^4
+            delta_rho_cu = mps_hadamard(delta_rho_sq, delta_rho,
+                                         max_bond=max_bond, cutoff=cutoff)
+            term3 = mps_scale(delta_rho_cu, -1.0 / rho_0 ** 4)
+            inv_rho = mps_add(inv_rho, term3, max_bond=max_bond, cutoff=cutoff)
 
     return inv_rho
 
 
 def compute_equilibrium_mps(mps_list, lattice, n_grid,
                              max_bond=None, cutoff=1e-10,
-                             return_moments=False):
+                             return_moments=False, taylor_order=2):
     """
     Compute all 9 equilibrium distributions in MPS space.
 
@@ -154,6 +167,7 @@ def compute_equilibrium_mps(mps_list, lattice, n_grid,
         cutoff: SVD cutoff
         return_moments: if True, also return (rho, rhou_x, rhou_y, u_x, u_y) —
                         all already computed internally, zero extra cost
+        taylor_order: order of 1/rho Taylor expansion (1, 2, or 3). Default 2.
 
     Returns:
         f_eq_list: list of 9 equilibrium MPS
@@ -171,7 +185,8 @@ def compute_equilibrium_mps(mps_list, lattice, n_grid,
     # --- Sub-step 2: Inverse density (Taylor expansion) ---
     ones = build_ones_mps(num_sites)
     inv_rho = compute_inverse_density_mps(rho, ones, n_grid,
-                                           max_bond=max_bond, cutoff=cutoff)
+                                           max_bond=max_bond, cutoff=cutoff,
+                                           order=taylor_order)
 
     # --- Sub-step 3: Velocity extraction ---
     u_x = mps_hadamard(rhou_x, inv_rho, max_bond=max_bond, cutoff=cutoff)
@@ -256,7 +271,7 @@ def compute_equilibrium_mps(mps_list, lattice, n_grid,
 
 def collide_bgk_mps(mps_list, lattice, tau, n_grid,
                      max_bond=None, cutoff=1e-10,
-                     return_moments=False):
+                     return_moments=False, taylor_order=2):
     """
     Full BGK collision in MPS space.
 
@@ -271,6 +286,7 @@ def collide_bgk_mps(mps_list, lattice, tau, n_grid,
         cutoff: SVD cutoff
         return_moments: if True, also return (rho, rhou_x, rhou_y, u_x, u_y) —
                         all already computed during equilibrium, zero extra cost
+        taylor_order: order of 1/rho Taylor expansion (1, 2, or 3). Default 2.
 
     Returns:
         f_new_list: list of 9 post-collision MPS
@@ -278,7 +294,8 @@ def collide_bgk_mps(mps_list, lattice, tau, n_grid,
     """
     result = compute_equilibrium_mps(mps_list, lattice, n_grid,
                                       max_bond=max_bond, cutoff=cutoff,
-                                      return_moments=return_moments)
+                                      return_moments=return_moments,
+                                      taylor_order=taylor_order)
     if return_moments:
         f_eq, moments = result
     else:

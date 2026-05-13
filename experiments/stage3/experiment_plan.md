@@ -65,14 +65,11 @@ Map the accuracy-compression trade-off for all 3 test cases across multiple (N, 
 
 Cavity nt determined by running vanilla first. MPS runs for same nt.
 
-**Cylinder (TBD — implementation decision after TG+cavity results):**
+**Cylinder is NOT in Exp 1.** Cylinder appears only in Exp 5 — its unique
+value is the drag/lift observable on the immersed body, not the chi/error
+curve (which cavity already covers). Removed from Exp 1 to save ~32 jobs.
 
-| N | Re | tau | D | nt |
-|---|---|---|---|---|
-| 128 | 100 | 0.548 | 16 | 6,000 |
-| 256 | 100 | 0.596 | 32 | 12,000 |
-
-All use: u = 0.1, cutoff = 1e-10, mapping = snake.
+All TG/Cavity Exp 1 jobs use: u = 0.1, cutoff = 1e-10, mapping = snake.
 
 ### Chi sweep
 16 values: `[6, 8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 48, 56, 64]`
@@ -93,8 +90,7 @@ Every 50 steps (N=64), every 100 steps (N≥128).
 - Load vanilla reference, run MPS, save JSON
 - TG: 6 × 16 = 96 jobs
 - Cavity: 6 × 16 = 96 jobs
-- Cylinder: 2 × 16 = 32 jobs (TBD)
-- **Total: ~224 jobs**
+- **Total: 192 jobs** (cylinder removed — only in Exp 5)
 
 ### Data collected per job (JSON)
 
@@ -182,43 +178,68 @@ Unlike Exp 1 (fix chi, measure error), here we observe how much compression the 
 
 All pairs with tau = 0.3·N/Re + 0.5 in range (0.505, 2.0). u = 0.1 throughout.
 
+**Grid extended from 23 → 34 (N, Re) pairs** (May 2026): added N=16 column,
+Re=50 column, Re=800 / Re=2000 mid points. Aim is denser sampling for cleaner
+log/power-law fits per Re curve. All additions respect tau ≥ 0.51 stability.
+
 | N | Re | tau | L (sites) | nt_tg (2×tau_d) | nt_cav (est.) |
 |---|---|---|---|---|---|
+| 16 | 50 | 0.596 | 8 | 203 | ~500 |
+| 16 | 100 | 0.548 | 8 | 405 | ~1,000 |
+| 16 | 200 | 0.524 | 8 | 810 | ~2,000 |
+| 32 | 50 | 0.692 | 10 | 405 | ~1,000 |
 | 32 | 100 | 0.596 | 10 | 810 | ~2,000 |
 | 32 | 200 | 0.548 | 10 | 1,621 | ~4,000 |
 | 32 | 400 | 0.524 | 10 | 3,242 | ~7,000 |
 | 32 | 1000 | 0.510 | 10 | 8,105 | ~15,000 |
+| 64 | 50 | 0.884 | 12 | 810 | ~2,000 |
 | 64 | 100 | 0.692 | 12 | 1,621 | ~8,000 |
 | 64 | 200 | 0.596 | 12 | 3,242 | ~15,000 |
 | 64 | 400 | 0.548 | 12 | 6,484 | ~25,000 |
+| 64 | 800 | 0.524 | 12 | 12,969 | ~50,000 |
 | 64 | 1000 | 0.519 | 12 | 16,211 | ~60,000 |
 | 64 | 3200 | 0.506 | 12 | 51,876 | ~150,000 |
+| 128 | 50 | 1.268 | 14 | 1,621 | ~12,000 |
 | 128 | 100 | 0.884 | 14 | 3,242 | ~25,000 |
 | 128 | 200 | 0.692 | 14 | 6,484 | ~50,000 |
 | 128 | 400 | 0.596 | 14 | 12,969 | ~80,000 |
+| 128 | 800 | 0.548 | 14 | 25,938 | ~150,000 |
 | 128 | 1000 | 0.538 | 14 | 32,422 | ~200,000 |
+| 128 | 2000 | 0.519 | 14 | 64,844 | ~350,000 |
 | 128 | 3200 | 0.512 | 14 | 103,752 | ~500,000 |
 | 256 | 100 | 1.268 | 16 | 6,484 | ~80,000 |
 | 256 | 200 | 0.884 | 16 | 12,969 | ~150,000 |
 | 256 | 400 | 0.692 | 16 | 25,938 | ~200,000 |
+| 256 | 800 | 0.596 | 16 | 51,876 | ~350,000 |
 | 256 | 1000 | 0.577 | 16 | 64,845 | ~500,000 |
+| 256 | 2000 | 0.538 | 16 | 129,690 | ~800,000 |
 | 256 | 3200 | 0.524 | 16 | 207,505 | ~1,500,000 |
 | 512 | 200 | 1.268 | 18 | 25,938 | ~300,000 |
 | 512 | 400 | 0.884 | 18 | 51,876 | ~500,000 |
 | 512 | 1000 | 0.654 | 18 | 129,691 | ~1,500,000 |
 | 512 | 3200 | 0.548 | 18 | 415,011 | ~5,000,000 |
 
-**23 (N, Re) pairs.** All jobs capped at 48h.
+**34 (N, Re) pairs.** All jobs capped at 48h (use checkpointing).
 
 ### Cutoff values
 - cutoff = 1e-10 (standard)
 - cutoff = 1e-7 (aggressive — Taylor error is ~1e-6, so SVs below 1e-7 may be noise)
 
 ### Job structure
-- TG: 23 × 2 cutoffs = **46 jobs**
-- Cavity: 23 × 2 cutoffs = **46 jobs**
-- Vanilla baselines: 46 total (one per (test_case, N, Re), shared with Exp 1)
-- **Total: 92 MPS jobs + 46 baselines**
+- TG: 34 × 2 cutoffs = **68 jobs**
+- Cavity: 34 × 2 cutoffs = **68 jobs**
+- Vanilla baselines: 68 total (one per (test_case, N, Re), shared with Exp 1)
+- **Total: 136 MPS jobs + 68 baselines**
+
+### Per-Re point counts (for the log/power-law fits)
+- Re=50: 4 N values (16, 32, 64, 128)
+- Re=100: 5 N values (16, 32, 64, 128, 256)
+- Re=200: 6 N values (16, 32, 64, 128, 256, 512)
+- Re=400: 5 N values (32, 64, 128, 256, 512)
+- Re=800: 3 N values (64, 128, 256) — sparse
+- Re=1000: 5 N values (32, 64, 128, 256, 512)
+- Re=2000: 2 N values (128, 256) — sparse
+- Re=3200: 4 N values (64, 128, 256, 512)
 
 ### Data per job
 Same JSON as Exp 1. Key: `per_pop_chi`, `mean_chi`, `l2_err_vs_vanilla`, `wall_time_per_step_s`, `mps_memory_floats` at every snapshot.
@@ -245,7 +266,7 @@ Same JSON as Exp 1. Key: `per_pop_chi`, `mean_chi`, `l2_err_vs_vanilla`, `wall_t
 MPS-native LBM has three error sources. Quantify each independently.
 
 ### Error sources
-1. **Taylor 1/rho** — 2nd-order Taylor expansion in collision. Theoretical: O(Ma^6)
+1. **Taylor 1/rho** — Taylor expansion in collision. Gross paper Appendix B reports fitted exponents 2.4 (1st), 4.5 (2nd), 6.5 (3rd order)
 2. **SVD truncation** — bond dimension compression during Hadamard / additions
 3. **Boundary conditions** — mask-based BC operations
 
@@ -254,8 +275,15 @@ MPS-native LBM has three error sources. Quantify each independently.
 - **Taylor + truncation**: TG + fixed chi/cutoff → subtract Taylor-only → truncation
 - **Taylor + truncation + BC**: Cavity (same chi) → subtract TG error → BC contribution
 
-### 3a: Taylor error scaling with Ma
-TG periodic, full rank, cutoff=0. Vary u (Ma) at N=64 Re=100.
+### 3a: Taylor error scaling with Ma — replicate Gross Appendix B
+TG periodic, full rank (max_bond=None), cutoff=0. Test all three Taylor orders.
+
+**Code change required:** extend `compute_inverse_density_mps` to support `order` parameter:
+- 1st order: `1/rho ≈ 1/rho_0 - delta/rho_0²`
+- 2nd order (current): `... + delta²/rho_0³`
+- 3rd order: `... - delta³/rho_0⁴`
+
+**Ma sweep** (fixed N=64, Re=100, vary u):
 
 | u | Ma | tau | nt |
 |---|---|---|---|
@@ -265,30 +293,40 @@ TG periodic, full rank, cutoff=0. Vary u (Ma) at N=64 Re=100.
 | 0.1 | 0.173 | 0.692 | 1,621 |
 | 0.15 | 0.260 | 0.788 | 1,621 |
 
-Also N sweep at u=0.1: N = 32, 64, 128, 256.
+Run for each Taylor order: 1st, 2nd, 3rd. Plot log(error) vs log(Ma).
 
-**Jobs:** 9. **Key output:** log(error) vs log(Ma) — slope ~6
+**Expected slopes** (from Gross Table B.1):
+- 1st order → ~2.4
+- 2nd order → ~4.5
+- 3rd order → ~6.5
+
+**N sweep** (grid independence at u=0.1, all 3 orders): N = 32, 64, 128, 256.
+
+**Jobs:** 5 (Ma) × 3 (orders) + 4 (N) × 3 (orders) = **27 jobs** (fast, full rank at small grids)
+
+**Key output:** Reproduce Gross Fig B.10 — confirms our implementation matches their published results.
 
 ### 3b: Truncation error (no BC)
-TG, N=64, Re=100, u=0.1. Chi sweep × 3 cutoffs (1e-10, 1e-7, 0).
+TG, N=64, Re=100, u=0.1. Chi sweep × 3 cutoffs (1e-10, 1e-7, 0). Use 2nd-order Taylor (default).
 error_truncation = error_mps - error_taylor_only
 
 **Jobs:** 16 × 3 = 48
 
 ### 3c: BC error
-Cavity, N=64, Re=100, u=0.1. Chi sweep × 2 cutoffs (1e-10, 1e-7).
+Cavity, N=64, Re=100, u=0.1. Chi sweep × 2 cutoffs (1e-10, 1e-7). Use 2nd-order Taylor.
 error_bc = error_cavity - error_tg (same chi)
 
 **Jobs:** 16 × 2 = 32
 
-### Total: 89 jobs
+### Total: 107 jobs
 
 ### Thesis output
-1. Taylor error vs Ma (log-log, verify O(Ma^6))
-2. Error decomposition stacked bar per chi
-3. Truncation error vs chi for 3 cutoffs
-4. Taylor error vs N
-5. Table: dominant error source at chi = 16, 32, 64
+1. **Fig:** Taylor error vs Ma (log-log) for orders 1/2/3 — reproduce Gross Fig B.10
+2. **Table:** Fitted exponents per order — compare with Gross Table B.1
+3. **Fig:** Error decomposition stacked bar per chi (Taylor + Truncation + BC)
+4. **Fig:** Truncation error vs chi for 3 cutoffs
+5. **Fig:** Taylor error vs N (grid independence)
+6. **Table:** Dominant error source at chi = 16, 32, 64
 
 ### Files
 - `experiments/stage3/exp3_error_decomposition.py`
@@ -309,11 +347,38 @@ Given a fixed memory budget, is MPS-native at high resolution better than vanill
 
 ### Approach
 For each chi:
-1. Compute MPS memory: `9 × L × chi²` with `L = 2·log₂(N)`
-2. Find N_coarse = `√L × chi` = `4 × chi` (for N=256, L=16)
+1. Compute MPS memory using **Gross Eq 46** (exact NVPS), adapted for our snake encoding:
+   ```
+   NVPS_MPS = Σ_{k=1..K} min(p^{k-1}, p^{K-k+1}, χ) × p × min(p^k, p^{K-k}, χ)
+   ```
+   Per population, then × 9 populations.
+   - **D**: spatial dimensions (D=2 for 2D LBM, D=3 for 3D)
+   - **K**: number of MPS sites
+   - **p**: physical dimension per site
+   - **Gross's interleaved encoding**: K = log₂(N), p = 2^D (each site holds D bits, one per dimension)
+   - **Our snake encoding**: K = D · log₂(N), p = 2 (each site holds 1 bit)
+   - Both encodings give very similar NVPS totals for a given field — the bond cap structure mirrors
+
+2. Find N_coarse = `floor(√(NVPS_MPS / 9))` (memory-equivalent dense grid)
 3. Run: fine vanilla (reference) + MPS-native + coarse vanilla
 4. Compare L2 velocity error vs fine vanilla
-5. Break-even at chi=64 (N_coarse=256=N_fine, CR=1.0)
+
+**Why Eq 46, not the simpler formula?** Our previous formula `9 × L × χ²` was wrong — it missed the physical dim factor (`χ × p × χ` per middle tensor) AND ignored edge bond caps (where bonds are bounded by `p^k`, often smaller than χ). These errors partially cancel but don't yield exact NVPS. For absolute comparisons we use Eq 46.
+
+**Snake-encoded NVPS table** (N=256, K=2·log₂(256)=16, p=2):
+
+| χ at N=256 | NVPS (per pop) | × 9 | CR vs dense (589,824) |
+|---|---|---|---|
+| 16 | 4,776 | 42,984 | 13.72 |
+| 32 | 15,016 | 135,144 | 4.36 |
+| 64 | 43,688 | 393,192 | 1.50 |
+| 80 | ~60,000 | ~540,000 | ~1.09 (near break-even) |
+| 96 | 72,360 | 651,240 | 0.91 (MPS slightly more) |
+| 128 | 109,224 | 983,016 | 0.60 (MPS more memory) |
+
+Break-even at χ ≈ 80 (vs χ=64 with our old simplified formula).
+
+For comparison, interleaved encoding gives slightly lower NVPS (e.g. 41,504 per pop at χ=64 vs 43,688 for snake), with break-even at χ ≈ 96. Both are exact under Eq 46, just adapted to the encoding.
 
 ### Parameters
 
@@ -323,7 +388,7 @@ For each chi:
 
 **Chi sweep (16 values each, different per test case):**
 - TG: `[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]`
-- Cavity: `[6, 8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 48, 56, 64]` (same as stage 2)
+- Cavity: `[6, 8, 10, 12, 14, 16, 20, 24, 28, 32, 40, 48, 56, 64, 72, 80]` (extended to snake break-even at ~80)
 
 ### Stopping criteria
 - **TG**: 2×tau_decay per grid (same approach as stage 2)
@@ -341,11 +406,12 @@ For each chi:
   "experiment": "exp4_memory_comparison",
   "params": {"test_case", "n_fine": 256, "chi", "Re", "cutoff": 1e-10},
   "memory": {
-    "mps_floats": 36864,
+    "mps_floats": 373536,
     "dense_fine_floats": 589824,
-    "n_coarse": 64,
-    "dense_coarse_floats": 36864,
-    "compression_ratio": 16.0
+    "n_coarse": 203,
+    "dense_coarse_floats": 371007,
+    "compression_ratio": 1.58,
+    "formula": "Gross Eq 46"
   },
   "errors": {
     "mps_vs_fine": 0.0035,
@@ -362,10 +428,12 @@ For each chi:
 ### Comparison with Stage 2
 Overlay on stage 2 CSV data (`experiments/stage2/results/`) to show: does full MPS-native do better or worse than compress-decompress?
 
+**Note**: stage 2 used the simpler `9·L·χ²` formula. When overlaying, recompute stage 2's N_coarse using Gross Eq 46 for fair comparison, OR plot "error vs NVPS" directly (memory on x-axis instead of N_coarse).
+
 ### Thesis output
 1. Error vs memory — MPS-native vs coarse vanilla (per test case, per Re)
-2. Overlay with stage 2 compress-decompress (dashed)
-3. Crossover chi table per (test_case, Re)
+2. Overlay with stage 2 compress-decompress (dashed) — using consistent NVPS formula
+3. Crossover chi table per (test_case, Re) — using Gross Eq 46
 4. Discussion: accumulated Taylor error (MPS-native) vs fresh compression (stage 2)
 
 ### Files
@@ -378,18 +446,119 @@ Overlay on stage 2 CSV data (`experiments/stage2/results/`) to show: does full M
 ## Experiment 5: Observable Validation & Scaling
 
 ### Objective
-Verify MPS-native observables (point eval, coarse field, drag/lift, mass, convergence) match decompressed values. Measure observable extraction cost vs N.
+Verify MPS-native observables work correctly and scale efficiently. Two questions:
+1. **Correctness**: do MPS observables match what you'd compute from decompressed field?
+2. **Physical accuracy + cost**: how much error vs vanilla, and how does extraction time scale with N?
 
-### Approach
-- Run MPS at multiple N values
-- Extract observables from MPS AND from decompressed state
-- Compare accuracy and measure timing
+### What we learn
+- **RQ2**: Can observables be computed without decompression?
+- Validates the "never decompress" claim with hard numbers
+- Cost scaling: O(log N · chi²) per observable vs O(N²) for decompression
+
+### Three-way comparison
+For each observable:
+1. **MPS direct** — e.g. `mps_evaluate_at_point()` from compressed state
+2. **MPS decompressed** — `decompress_populations()` then numpy op on dense array
+3. **Vanilla** — from dense reference simulation (load from Exp 1/2 baselines)
+
+Error decomposition:
+- `MPS vs MPS-decompressed` → implementation correctness (target: ~1e-15 machine precision)
+- `MPS-decompressed vs Vanilla` → MPS solution error (Taylor + truncation + BC)
+- `MPS vs Vanilla` → total error
+
+### Observables tested
+
+| Observable | MPS function | Dense equivalent | Cost (theory) |
+|---|---|---|---|
+| Point evaluation | `mps_evaluate_at_point` | `field[x, y]` | O(L · chi²) |
+| Mass (sum) | `mps_sum_value` | `np.sum(field)` | O(L · chi²) |
+| Coarse field (lvl k) | `mps_coarse_field(k)` | reshape + sum | O(L · chi²) |
+| Drag/lift | `compute_drag_lift_mps` | momentum exchange | O(L · chi² · #boundary_pops) |
+| Convergence du | `check_convergence_mps` | L2 norm of u diff | O(L · chi³) |
+| Inverse density | `compute_inverse_density_mps` | `1/rho` | O(L · chi³) (Taylor approx) |
+
+### Parameters
+
+| N | L | Test cases |
+|---|---|---|
+| 32 | 10 | TG, cavity |
+| 64 | 12 | TG, cavity |
+| 128 | 14 | TG, cavity, cylinder |
+| 256 | 16 | TG, cavity, cylinder |
+| 512 | 18 | TG, cavity (if feasible) |
+
+Chi values: 32, 64 per (N, test_case).
+
+### Sub-experiments
+
+**5a: Point evaluation accuracy** — sample at 50 random fluid points, record (MPS, decomp, vanilla) per point, compute max/mean/median error per pair.
+
+**5b: Mass conservation** — `mps_sum_value(rho)` vs `np.sum(rho_decomp)` vs `np.sum(rho_vanilla)`, single scalar comparison.
+
+**5c: Coarse field accuracy** — levels 1, 2, 3 (n/2, n/4, n/8 grids). Per level: `mps_coarse_field` vs `decomp.reshape().sum()` vs `vanilla.reshape().sum()`. Record max error per cell.
+
+**5d: Drag/lift** (cylinder only) — `compute_drag_lift_mps` (per-direction masks) vs decompressed momentum exchange vs vanilla. N=128, 256.
+
+**5e: Convergence criterion** — run 2 MPS steps, compute `check_convergence_mps` (uses moments). Decompress before/after, compute du from numpy. Compare values + timing.
+
+**5f: Cost scaling** — measure extraction time of each observable per (N, chi). Plot vs N. Find crossover where MPS-direct beats decompress+numpy.
+
+### Job structure
+
+Reuse Exp 1/2 saved MPS final states + vanilla baselines. Each job: load state, run all observables, save results.
+
+| Test case | N values | Jobs |
+|---|---|---|
+| TG | 32, 64, 128, 256, 512 | 10 (× 2 chi) |
+| Cavity | 32, 64, 128, 256, 512 | 10 |
+| Cylinder | 128, 256 | 4 |
+
+**Total: 24 jobs** (fast — just observable extraction, ~minutes each)
+
+### Data per job (JSON)
+
+```json
+{
+  "experiment": "exp5_observables",
+  "params": {"test_case", "n", "chi", "Re", "u"},
+  "observables": {
+    "point_eval": {
+      "n_probes": 50,
+      "errors": {
+        "mps_vs_decomp": {"max": 1e-16, "mean": 5e-17},
+        "decomp_vs_vanilla": {"max": 0.05, "mean": 0.02},
+        "mps_vs_vanilla": {"max": 0.05, "mean": 0.02}
+      },
+      "timing": {
+        "mps_per_call_us": 50,
+        "decompress_us": 12000,
+        "numpy_lookup_us": 0.1
+      }
+    },
+    "mass": {"mps": 4096.001, "decomp": 4096.001, "vanilla": 4096.000,
+             "errors": {...}, "timing": {...}},
+    "coarse_field": {
+      "level_1": {"errors": {...}, "timing": {...}},
+      "level_2": {...},
+      "level_3": {...}
+    },
+    "drag_lift": {...},
+    "convergence": {...},
+    "inverse_density": {...}
+  }
+}
+```
 
 ### Thesis output
-- Observable accuracy table
-- Observable cost vs N (should show O(log N · chi²))
+1. **Table:** Observable accuracy at multiple scales — should be near machine precision for `mps_vs_decomp`
+2. **Fig:** Cost scaling — extraction time vs N (log-log). MPS-direct sub-linear, decompress+numpy linear in N²
+3. **Fig:** Crossover plot — at what N does MPS-direct beat decompress+numpy?
+4. **Discussion:** Practical implications — real-time monitoring at large N without materializing dense field
 
-### Status: outlined, details TBD
+### Files
+- `experiments/stage3/exp5_observables.py`
+- `experiments/stage3/jobs/submit_exp5.sh`
+- `experiments/stage3/jobs/params/exp5_params.csv`
 
 ---
 
@@ -401,3 +570,46 @@ Verify MPS-native observables (point eval, coarse field, drag/lift, mass, conver
 4. Experiment 2 (grid scaling) — key thesis figure
 5. Experiment 3 (error decomposition) — understanding
 6. Experiment 5 (observables) — formalize notebook results
+
+---
+
+## Status (2026-05-13)
+
+### Code infrastructure — DONE
+
+- `common.py` — Job dataclass + CSV I/O, baseline cache, checkpoint
+  save/load, Snapshot dataclass + JSON writer, NVPS memory accounting
+  (Gross Eq 46), L2 helper.
+- `test_cases.py` — TG / cavity / cylinder setup with uniform contract:
+  `apply_bc_vanilla(lattice, f_post_collision)` returns post-stream+BC.
+  Cavity uses FWBB (matches MPS apply_mps_boundary). Cylinder uses
+  apply_fwbb_cylinder. Boundary masks for drag/lift precomputed for
+  cylinder.
+- `runners.py` — `run_vanilla` (with baseline cache) and `run_mps` (with
+  per-step convergence + 2-consecutive count, checkpoint save/resume,
+  wall-clock limit). Safe BGK (uses `_safe_moments` for cylinder solid
+  nodes — matches notebook pattern).
+- `build_master_jobs.py` — enumerates all 5 experiments, dedups,
+  produces `jobs/master_jobs.csv` (460 unique jobs).
+- Code validated against the three canonical notebooks (TG / cavity /
+  cylinder) at full rank — produces expected error floors.
+
+### Master CSV — DONE
+
+- Total: **460 unique jobs** (after deduplication, removing 75 overlaps)
+- Breakdown: Exp 1 = 192, Exp 2 = 136, Exp 3 = 107, Exp 4 = 96, Exp 5 = 4 (cylinder demo for drag/lift)
+- Cylinder removed from Exp 1 — only appears in Exp 5
+- Exp 2 grid extended 23 → 34 (N, Re) pairs for denser fits
+
+### Remaining work
+
+1. **`run_job.py`** — CLI entry point (`python run_job.py --job-id N`) that
+   reads `master_jobs.csv`, calls `run_mps(job)`. Glue layer (~40 lines).
+2. **`jobs/submit.sh`** — SLURM array script (`#SBATCH --array=0-459`).
+   Reads `SLURM_ARRAY_TASK_ID`, calls `run_job.py`. Sets wall-clock
+   limit so checkpointing kicks in before kill.
+3. **Analysis scripts** (one per experiment): `analyze_exp{1..5}.py`
+   read relevant JSONs from `results/`, filter by experiment criteria,
+   produce thesis figures + tables.
+4. **Cluster submission + monitoring** — actually run the jobs.
+5. **Figure generation + thesis writing**.

@@ -17,8 +17,9 @@ Eq 40 (immersed objects):
 
 import numpy as np
 
-from .arithmetic import mps_add, mps_scale, mps_hadamard
+from .arithmetic import mps_add, mps_subtract, mps_scale, mps_hadamard
 from .streaming import stream_population_2d
+from .collision import build_ones_mps
 from tn.compression import field_to_qtt
 
 
@@ -223,8 +224,6 @@ def precompute_cylinder_bc(n, lattice, u_inlet, rho_inlet=1.0,
         dict with all precomputed BC data
     """
     from lbm.boundary import create_cylinder_mask, create_channel_walls
-    from .arithmetic import mps_subtract
-    from .collision import build_ones_mps
 
     if cylinder_r is None: cylinder_r = n / 16
     if cylinder_x is None: cylinder_x = n / 4
@@ -346,11 +345,12 @@ def precompute_cylinder_bc(n, lattice, u_inlet, rho_inlet=1.0,
         'cylinder_2d': cylinder,
         'channel_walls_2d': channel_walls,
         'n': n,
+        'rho_inlet': rho_inlet,
     }
 
 
 def apply_mps_cylinder_bc(pre_streaming_list, lattice, bc_data,
-                           max_bond=None, cutoff=1e-10):
+                           max_bond=None, cutoff=1e-10, moments=None):
     """
     Combined streaming + boundary conditions for cylinder flow.
 
@@ -358,7 +358,7 @@ def apply_mps_cylinder_bc(pre_streaming_list, lattice, bc_data,
     1. Eq 36: non-cyclic streaming + per-region b() at domain edges
        - Walls (Eq 37): b = f_ibar
        - Inlet (Eq 38): b = f_ibar + velocity correction
-       - Outlet (Eq 39): b = -f_i + f_eq(rho_0, u_b)
+       - Outlet (Eq 39): b = -f_i + f_eq(rho_0, u_b) where u_b = actual velocity
     2. Eq 40: immersed cylinder correction
 
     Takes PRE-streaming (post-collision) populations.
@@ -370,6 +370,10 @@ def apply_mps_cylinder_bc(pre_streaming_list, lattice, bc_data,
         bc_data: output of precompute_cylinder_bc
         max_bond: bond dimension limit
         cutoff: SVD cutoff
+        moments: tuple (rho, rhou_x, rhou_y, u_x, u_y) from
+                 collide_bgk_mps(return_moments=True). When provided,
+                 outlet Eq 39 uses actual velocity (dynamic u_b).
+                 When None, falls back to precomputed constant u_b.
 
     Returns:
         new_list: list of 9 MPS (post-streaming, post-BC)
@@ -381,6 +385,58 @@ def apply_mps_cylinder_bc(pre_streaming_list, lattice, bc_data,
     metadata = bc_data['metadata']
     cylinder_mps = bc_data['cylinder_mps']
     fluid_mask_mps = bc_data['fluid_mask_mps']
+
+    # --- Precompute dynamic outlet equilibrium if moments provided ---
+    # Eq 39: b = -f_i + 2*w_i*rho_b*(1 + (c_i·u_b)^2/(2*cs4) - u_b·u_b/(2*cs2))
+    # where u_b = actual velocity at outlet nodes (Gross: "u(x in B, t) = u_b")
+    dynamic_outlet_eqs = None
+    if moments is not None and any(om is not None for om in outlet_masks):
+        _, _, _, u_x, u_y = moments
+        cs2 = lattice.cs2
+        cs4 = cs2 * cs2
+        rho_0 = bc_data.get('rho_inlet', 1.0)
+
+        # u_b · u_b (shared across all outlet populations)
+        usq = mps_add(
+            mps_hadamard(u_x, u_x, max_bond=max_bond, cutoff=cutoff),
+            mps_hadamard(u_y, u_y, max_bond=max_bond, cutoff=cutoff),
+            max_bond=max_bond, cutoff=cutoff
+        )
+
+        dynamic_outlet_eqs = [None] * lattice.q
+        for i in range(lattice.q):
+            if outlet_masks[i] is None:
+                continue
+            om_mps, _ = outlet_masks[i]
+            cx = float(lattice.c[i, 0])
+            cy = float(lattice.c[i, 1])
+
+            # c_i · u_b
+            if cx != 0 and cy != 0:
+                cu = mps_add(mps_scale(u_x, cx), mps_scale(u_y, cy),
+                             max_bond=max_bond, cutoff=cutoff)
+            elif cx != 0:
+                cu = mps_scale(u_x, cx)
+            else:
+                cu = mps_scale(u_y, cy)
+
+            # (c_i · u_b)^2
+            cu_sq = mps_hadamard(cu, cu, max_bond=max_bond, cutoff=cutoff)
+
+            # bracket = 1 + cu^2/(2*cs4) - usq/(2*cs2)
+            ones = build_ones_mps(len(u_x.tensors))
+            bracket = mps_add(ones,
+                        mps_add(mps_scale(cu_sq, 1.0 / (2.0 * cs4)),
+                                mps_scale(usq, -1.0 / (2.0 * cs2)),
+                                max_bond=max_bond, cutoff=cutoff),
+                        max_bond=max_bond, cutoff=cutoff)
+
+            # f_eq_out = 2 * w_i * rho_0 * bracket
+            f_eq_out = mps_scale(bracket, 2.0 * lattice.w[i] * rho_0)
+
+            # Mask to outlet nodes only
+            dynamic_outlet_eqs[i] = mps_hadamard(f_eq_out, om_mps,
+                                                  max_bond=max_bond, cutoff=cutoff)
 
     # --- Step 1: Domain boundaries (Eq 36 with per-region b()) ---
     streamed_list = []
@@ -412,15 +468,17 @@ def apply_mps_cylinder_bc(pre_streaming_list, lattice, bc_data,
             else:
                 bc_value = inlet_corrs[i]
 
-        # Outlet (Eq 39): -f_i + f_eq at outlet nodes
+        # Outlet (Eq 39): b(f_ibar) = -f_ibar + f_eq at outlet nodes
+        # b() takes f_ibar as INPUT and returns new f_i. Use pre_streaming_list[opp], not [i]!
         if outlet_masks[i] is not None:
             om_mps, _ = outlet_masks[i]
-            # -f_i at outlet
-            neg_f_outlet = mps_hadamard(pre_streaming_list[i], om_mps,
+            # -f_ibar at outlet (input to b() is f_ibar = f[opp])
+            neg_f_outlet = mps_hadamard(pre_streaming_list[opp], om_mps,
                                          max_bond=max_bond, cutoff=cutoff)
             neg_f_outlet = mps_scale(neg_f_outlet, -1.0)
-            # -f_i + f_eq at outlet
-            outlet_bc = mps_add(neg_f_outlet, outlet_eqs[i],
+            # -f_ibar + f_eq at outlet (dynamic if moments provided, else precomputed)
+            f_eq_i = dynamic_outlet_eqs[i] if dynamic_outlet_eqs is not None else outlet_eqs[i]
+            outlet_bc = mps_add(neg_f_outlet, f_eq_i,
                                  max_bond=max_bond, cutoff=cutoff)
             if bc_value is not None:
                 bc_value = mps_add(bc_value, outlet_bc,
