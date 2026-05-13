@@ -139,13 +139,22 @@ def run_vanilla(job: Job, force: bool = False, verbose: bool = False) -> tuple[n
 
 def _take_snapshot(t: int, mps_list, mps_metadata, baseline_u: Optional[np.ndarray],
                    initial_mass: float, spec: TestCaseSpec, mapping: str,
-                   du: float, wall_cum_s: float, n: int, chi_cap: Optional[int]) -> Snapshot:
+                   du: float, wall_cum_s: float, n: int, chi_cap: Optional[int],
+                   compute_l2: bool = False) -> Snapshot:
+    """Build a Snapshot from the current MPS state.
+
+    L2 vs vanilla baseline is only meaningful when MPS time matches the
+    baseline's time (= final time of vanilla run). For intermediate
+    snapshots, comparing MPS at t against vanilla at t_final is misleading.
+    So we only compute L2 when compute_l2=True (set by the runner at the
+    last snapshot only).
+    """
     per_pop = [int(m.max_bond()) for m in mps_list]
     mass = float(sum(mps_sum_value(m) for m in mps_list))
     drift = (mass - initial_mass) / (initial_mass + 1e-30)
 
     l2 = None
-    if baseline_u is not None:
+    if compute_l2 and baseline_u is not None:
         try:
             f_dec = decompress_populations(mps_list, mps_metadata)
             _, u_mps = _safe_moments(D2Q9, f_dec)
@@ -222,12 +231,14 @@ def run_mps(job: Job,
     t_run_start = time.time()
 
     for t in range(t_start, spec.nt + 1):
-        # Snapshot
-        if t % spec.snapshot_every == 0:
+        # Snapshot (intermediate — no L2; that's set only at the final snapshot below)
+        is_final_nt = (t == spec.nt)
+        if t % spec.snapshot_every == 0 or is_final_nt:
             wall_cum = time.time() - t_run_start
             snap = _take_snapshot(t, mps_list, mps_metadata, baseline_u,
                                    initial_mass, spec, mapping,
-                                   du_val, wall_cum, job.n, chi_cap=job.chi)
+                                   du_val, wall_cum, job.n, chi_cap=job.chi,
+                                   compute_l2=is_final_nt)
             snapshots.append(snap)
             if verbose and (t == 0 or t % (spec.snapshot_every * 10) == 0):
                 print(f"  [mps t={t}] chi={snap.max_chi} mass_drift={snap.mass_drift_rel:.2e} "
@@ -270,12 +281,13 @@ def run_mps(job: Job,
                     t_converged = t + 1
                     if verbose:
                         print(f"[mps] converged at t={t+1} (du={du_val:.2e})")
-                    # Capture final snapshot at convergence point
+                    # Final snapshot at convergence — compute L2 vs baseline here
                     wall_cum = time.time() - t_run_start
                     snapshots.append(_take_snapshot(
                         t + 1, mps_list, mps_metadata, baseline_u,
                         initial_mass, spec, mapping,
                         du_val, wall_cum, job.n, chi_cap=job.chi,
+                        compute_l2=True,
                     ))
                     break
             else:

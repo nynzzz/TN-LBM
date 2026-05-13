@@ -16,6 +16,7 @@ result set, defined by filters in analysis/analyze_exp{N}.py scripts.
 from __future__ import annotations
 
 import json
+import os
 import pickle
 import time
 from dataclasses import dataclass, asdict, field
@@ -148,7 +149,13 @@ def save_baseline(job: Job, u_final: np.ndarray,
                   t_converged: Optional[int] = None,
                   wall_time_s: float = 0.0,
                   extra: Optional[dict] = None) -> None:
-    """Save vanilla baseline + metadata to .npz."""
+    """Save vanilla baseline + metadata to .npz. Atomic via tmp + rename.
+
+    With many MPS jobs sharing a baseline_key, multiple processes may try to
+    write the same path concurrently. Writing through a per-process tmp file
+    and `os.replace` guarantees the on-disk file is always a complete .npz —
+    no half-written reads (EOFError).
+    """
     meta = {
         "test_case": job.test_case, "n": job.n, "re": job.re, "u": job.u,
         "t_converged": int(t_converged) if t_converged is not None else -1,
@@ -157,16 +164,33 @@ def save_baseline(job: Job, u_final: np.ndarray,
     if extra:
         meta.update({k: (str(v) if not isinstance(v, (int, float, bool)) else v)
                      for k, v in extra.items()})
-    np.savez(baseline_path(job), u_final=u_final, meta=json.dumps(meta))
+    final_path = baseline_path(job)
+    # Per-process tmp file: two processes writing the same baseline won't
+    # clobber each other's tmp file before the rename.
+    tmp_path = final_path.with_suffix(f".npz.tmp.{os.getpid()}")
+    np.savez(tmp_path, u_final=u_final, meta=json.dumps(meta))
+    os.replace(tmp_path, final_path)  # atomic on POSIX
 
 
 def load_baseline(job: Job) -> tuple[np.ndarray, dict]:
-    """Load (u_final, meta_dict) for the baseline matching this job."""
+    """Load (u_final, meta_dict) for the baseline matching this job.
+
+    Brief retry guards against the (rare) race where a concurrent writer's
+    rename is in flight when we read.
+    """
     p = baseline_path(job)
     if not p.exists():
         raise FileNotFoundError(f"no baseline at {p} — run baseline first")
-    data = np.load(p, allow_pickle=False)
-    return data["u_final"], json.loads(str(data["meta"]))
+    last_err: Optional[Exception] = None
+    for attempt in range(5):
+        try:
+            data = np.load(p, allow_pickle=False)
+            return data["u_final"], json.loads(str(data["meta"]))
+        except (EOFError, OSError) as e:
+            last_err = e
+            time.sleep(0.5 + attempt)
+    assert last_err is not None
+    raise last_err
 
 
 def baseline_exists(job: Job) -> bool:
