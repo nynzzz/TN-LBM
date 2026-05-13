@@ -166,8 +166,9 @@ def save_baseline(job: Job, u_final: np.ndarray,
                      for k, v in extra.items()})
     final_path = baseline_path(job)
     # Per-process tmp file: two processes writing the same baseline won't
-    # clobber each other's tmp file before the rename.
-    tmp_path = final_path.with_suffix(f".npz.tmp.{os.getpid()}")
+    # clobber each other. Note: np.savez auto-appends ".npz" to paths that
+    # don't already end with it, so the tmp name MUST end with ".npz".
+    tmp_path = final_path.with_name(f"{final_path.stem}.tmp.{os.getpid()}.npz")
     np.savez(tmp_path, u_final=u_final, meta=json.dumps(meta))
     os.replace(tmp_path, final_path)  # atomic on POSIX
 
