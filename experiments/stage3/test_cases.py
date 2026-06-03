@@ -138,7 +138,12 @@ def _setup_cavity(job: Job) -> TestCaseSpec:
     u_init = np.zeros((2, n, n))
     f_init = compute_equilibrium(D2Q9, rho_init, u_init)
 
-    default_nt = {64: 20000, 128: 60000, 256: 200000, 512: 600000}.get(n, 50000 * (n // 64))
+    # Wall-clock safety bound; cavity actually terminates via convergence_tol below.
+    # Earlier version used `50000 * (n // 64)` for the fallback which evaluates to 0
+    # for any N<64 (integer division), silently producing empty baselines. Use
+    # explicit entries for small N and a non-zero fallback formula.
+    default_nt = {16: 5000, 32: 10000, 64: 20000, 128: 60000, 256: 200000, 512: 600000}.get(
+        n, max(5000, 50000 * n // 64))
     nt = job.nt if job.nt is not None else default_nt
     snap = job.snapshot_every or max(1, nt // 200)
 

@@ -25,3 +25,29 @@ tn-lbm-venv/
 # Large files
 *.gif
 *.csv
+# master_jobs.csv is the job-parameter manifest, not result data — keep tracked.
+!experiments/stage3/jobs/master_jobs.csv
+
+# Editor
+.omc/
+
+# Generated simulation outputs (regenerable from code; live on cluster + local)
+*.pkl
+*.npz
+experiments/stage3/results/
+experiments/stage3/checkpoints/
+experiments/stage3/baselines/
+experiments/stage3/baselines_exp4_coarse/
+experiments/stage3/exp_sv_spectrum/data/
+experiments/stage3/exp_sv_spectrum/plots/
+
+# Generated figures from analysis scripts (regenerable)
+results/stage3/figures/
+results/stage3/tables/
+
+# All PNG/PDF outputs under results/ are regenerable 
+results/**/*.png
+results/**/*.pdf
+
+# Vanilla LBM baseline validation figures are a stable reference
+!results/vanilla_lbm/**/*.png
