@@ -2,10 +2,17 @@
 # Submit one SV-capture run to Snellius.
 #
 # Usage:
-#     sbatch experiments/stage3/exp_sv_spectrum/submit_sv.sh <chi> <run_name>
+#     sbatch experiments/stage3/exp_sv_spectrum/submit_sv.sh <chi> <run_name> [cutoff]
 # Example:
 #     sbatch experiments/stage3/exp_sv_spectrum/submit_sv.sh 17 cluster_chi17
 #     sbatch experiments/stage3/exp_sv_spectrum/submit_sv.sh 12 cluster_chi12_repro
+#     sbatch experiments/stage3/exp_sv_spectrum/submit_sv.sh 17 cluster_chi17_cutoff0 0
+#
+# cutoff defaults to 1e-10. Pass 0 to keep all SVs (captures spectrum tail
+# below 1e-10; needed to test whether the near-degenerate plateau at bond=3
+# extends past chi=12, explaining why chi=13/14/15 also bifurcate).
+# Note: cutoff=0 lets bond dims fill to the cap, so simulation is ~20-30%
+# slower per step.
 #
 # Runs TG N=256 Re=1000 (the wrong-attractor test physics) with the standard
 # 11-snapshot set from t=0 to t=64845. Outputs snapshot pickles into
@@ -24,16 +31,17 @@
 set -u
 
 if [ $# -lt 2 ]; then
-    echo "Usage: sbatch $0 <chi> <run_name>"
+    echo "Usage: sbatch $0 <chi> <run_name> [cutoff]"
     exit 1
 fi
 CHI="$1"
 RUN_NAME="$2"
+CUTOFF="${3:-1e-10}"
 
 echo "=== SV-capture job ${SLURM_JOB_ID} ==="
 echo "Started at $(date)"
 echo "Running on: $(hostname)  cpus=${SLURM_CPUS_PER_TASK}  mem=${SLURM_MEM_PER_NODE}MB"
-echo "chi=${CHI}  run_name=${RUN_NAME}"
+echo "chi=${CHI}  run_name=${RUN_NAME}  cutoff=${CUTOFF}"
 
 module purge
 module load 2024
@@ -52,6 +60,6 @@ python -u -m experiments.stage3.exp_sv_spectrum.run_sv_capture \
     --chi "${CHI}" --run-name "${RUN_NAME}" \
     --snapshot-times 0 100 500 2000 7000 15000 22000 30000 40000 50000 64845 \
     --n 256 --re 1000 \
-    --cutoff 1e-10 --taylor-order 2
+    --cutoff "${CUTOFF}" --taylor-order 2
 
 echo "=== done at $(date) ==="
